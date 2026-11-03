@@ -20,7 +20,8 @@ POST /auth/refresh/                    -> only when a call answers 401
 
 | Item | Value |
 |---|---|
-| Base URL (LAN, phone on the same Wi-Fi) | `http://10.78.54.10:8000/api/v1` |
+| Base URL | `https://tixelise.trelliscoerp.com/api/v1` |
+| Base URL (local dev) | `http://127.0.0.1:8000/api/v1` |
 | Content type | `application/json` |
 | Auth header | `Authorization: Bearer <access_token>` |
 | `Idempotency-Key` | **Mandatory** on `POST /pos/sales/` — 1–128 chars, unique per basket (§6) |
@@ -31,7 +32,8 @@ POST /auth/refresh/                    -> only when a call answers 401
 | Lists | POS endpoints return **plain arrays**, never paginated |
 
 Every path in this document is written from the host root, so
-`POST /api/v1/auth/login/` in full is `http://10.78.54.10:8000/api/v1/auth/login/`.
+`POST /api/v1/auth/login/` in full is
+`https://tixelise.trelliscoerp.com/api/v1/auth/login/`.
 The app's base constant already ends in `/api/v1`, so client code appends only
 `/auth/login/`.
 

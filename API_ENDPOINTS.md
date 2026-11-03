@@ -3,7 +3,8 @@
 **Backend API documentation for all three roles: Platform Admin, Tenant Admin, and POS Staff.**
 Every endpoint lists the method, path, auth role, request body, response body, and error cases — plus the full end-to-end flow.
 
-- **Base URL:** `http://localhost:8000/api/v1/`
+- **Base URL:** `https://tixelise.trelliscoerp.com/api/v1/`
+- **Local base URL:** `http://localhost:8000/api/v1/` (the `/api/v1` suffix is identical in both)
 - **Format:** JSON in, JSON out (UTF-8)
 - **Server:** `python manage.py runserver` from `backend/`
 
@@ -54,8 +55,8 @@ All list endpoints that use pagination return:
 ```json
 {
   "count": 57,
-  "next": "http://localhost:8000/api/v1/admin/events/?page=3",
-  "previous": "http://localhost:8000/api/v1/admin/events/?page=1",
+  "next": "https://tixelise.trelliscoerp.com/api/v1/admin/events/?page=3",
+  "previous": "https://tixelise.trelliscoerp.com/api/v1/admin/events/?page=1",
   "results": [ ... ]
 }
 ```
@@ -1320,7 +1321,7 @@ GET /api/v1/admin/audit-logs/?action=sale.created&actor=3&target_type=ticket
 ```json
 {
   "count": 42,
-  "next": "http://localhost:8000/api/v1/admin/audit-logs/?page=2",
+  "next": "https://tixelise.trelliscoerp.com/api/v1/admin/audit-logs/?page=2",
   "previous": null,
   "results": [
     {
@@ -1604,7 +1605,7 @@ POST /api/v1/pos/tickets/6f9619ff-8b86-d011-b42d-00c04fc964ff/reprint/
 ### Quick cURL walkthrough (copy-paste)
 
 ```bash
-BASE=http://localhost:8000/api/v1
+BASE=https://tixelise.trelliscoerp.com/api/v1
 
 # 1. Platform creates a tenant
 TOKEN=$(curl -s $BASE/auth/login/ -H "Content-Type: application/json" \

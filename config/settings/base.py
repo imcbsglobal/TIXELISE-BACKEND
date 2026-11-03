@@ -17,7 +17,9 @@ DEBUG = False
 
 ALLOWED_HOSTS = [
     h.strip()
-    for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    for h in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS", "tixelise.trelliscoerp.com,localhost,127.0.0.1"
+    ).split(",")
     if h.strip()
 ]
 
@@ -97,19 +99,46 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ---------------------------------------------------------------------------
-# Database — SQLite by default; set DATABASE_URL for PostgreSQL.
+# Database — SQLite by default; set DB_ENGINE=postgres for PostgreSQL.
 # ---------------------------------------------------------------------------
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-        # File-backed test DB so threaded concurrency tests share one database.
-        "TEST": {"NAME": str(BASE_DIR / "test_db.sqlite3")},
-        # SQLite busy timeout — writers wait instead of failing instantly.
-        "OPTIONS": {"timeout": 30},
+if os.environ.get("DB_ENGINE", "sqlite").strip().lower() in {"postgres", "postgresql"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "TRELLISCO_BOOKS"),
+            "USER": os.environ.get("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+            "HOST": os.environ.get("POSTGRES_HOST", ""),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            # Tixelise lives in its own schema of the shared TRELLISCO_BOOKS
+            # database. `tixelise` comes first, so every table is created there;
+            # `public` is only a fallback for the throwaway test database, which
+            # Django creates without that schema.
+            "OPTIONS": {
+                "options": os.environ.get(
+                    "POSTGRES_OPTIONS", "-c search_path=tixelise,public"
+                )
+            },
+            "CONN_MAX_AGE": 600,
+            "CONN_HEALTH_CHECKS": True,
+            "TEST": {
+                "NAME": os.environ.get("POSTGRES_TEST_DB", "test_TRELLISCO_BOOKS")
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            # File-backed test DB so threaded concurrency tests share one database.
+            "TEST": {"NAME": str(BASE_DIR / "test_db.sqlite3")},
+            # SQLite busy timeout — writers wait instead of failing instantly.
+            "OPTIONS": {"timeout": 30},
+        }
+    }
 
+# A full URL still wins when supplied (handy on a hosting platform).
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 if DATABASE_URL:
     import dj_database_url  # provided by dj-database-url package
@@ -159,7 +188,18 @@ CORS_ALLOWED_ORIGINS = [
     o.strip()
     for o in os.environ.get(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,",
+    ).split(",")
+    if o.strip()
+]
+
+# Django admin posts through a session cookie, and production sets
+# CSRF_COOKIE_SECURE, so an https origin that is not listed here is rejected
+# with "Origin checking failed". The DRF API is JWT-only and unaffected.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "CSRF_TRUSTED_ORIGINS", "https://tixelise.trelliscoerp.com"
     ).split(",")
     if o.strip()
 ]
