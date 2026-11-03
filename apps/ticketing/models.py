@@ -19,7 +19,7 @@ class TicketSequence(TenantOwnedModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "ticketing_ticketsequence_tixelise"
+        db_table = "tixelise_ticketing_ticketsequence"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "event"], name="uniq_tenant_event_sequence"
@@ -56,7 +56,7 @@ class Ticket(TenantOwnedModel):
     reprint_count = models.PositiveIntegerField(default=0)
 
     class Meta:
-        db_table = "ticketing_ticket_tixelise"
+        db_table = "tixelise_ticketing_ticket"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "event", "sequence_number"],

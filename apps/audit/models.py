@@ -22,7 +22,7 @@ class AuditLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
-        db_table = "audit_auditlog_tixelise"
+        db_table = "tixelise_audit_auditlog"
         ordering = ["-created_at"]
 
     def __str__(self):

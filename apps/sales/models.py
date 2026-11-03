@@ -29,7 +29,7 @@ class Sale(TenantOwnedModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "sales_sale_tixelise"
+        db_table = "tixelise_sales_sale"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "sale_reference"], name="uniq_tenant_sale_reference"
@@ -51,7 +51,7 @@ class SaleItem(models.Model):
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
 
     class Meta:
-        db_table = "sales_saleitem_tixelise"
+        db_table = "tixelise_sales_saleitem"
         ordering = ["id"]
 
 
@@ -74,7 +74,7 @@ class IdempotencyRecord(TenantOwnedModel):
     expires_at = models.DateTimeField()
 
     class Meta:
-        db_table = "sales_idempotencyrecord_tixelise"
+        db_table = "tixelise_sales_idempotencyrecord"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "actor", "idempotency_key"],

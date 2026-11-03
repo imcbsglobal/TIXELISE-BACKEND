@@ -28,7 +28,7 @@ class StaffProfile(TenantOwnedModel):
     last_login = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        db_table = "staff_staffprofile_tixelise"
+        db_table = "tixelise_staff_staffprofile"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "staff_code"], name="uniq_tenant_staff_code"

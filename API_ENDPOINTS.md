@@ -275,21 +275,30 @@ POST /api/v1/platform/tenants/
   "name": "Dreams Events",
   "timezone": "Asia/Kolkata",
   "currency": "INR",
-  "settings": {},
+  "phone": "+91 98765 43210",
+  "settings": {
+    "country_code": "IN",
+    "country_name": "INDIA",
+    "fiscal_year": { "from": "APRIL", "to": "MARCH" }
+  },
   "admin_username": "dreams_admin",
   "admin_password": "DreamsAdmin123!",
-  "admin_email": "admin@dreams.example"
+  "admin_email": "admin@dreams.example",
+  "admin_first_name": "John",
+  "admin_last_name": "Doe"
 }
 ```
 
 | Field | Required | Notes |
 |---|---|---|
-| `code` | yes | Unique platform-wide |
+| `code` | yes | Unique platform-wide. Becomes `client_id` in both central masters |
 | `name` | yes | |
 | `timezone`, `currency`, `settings` | no | Defaults: `UTC`, `INR`, `{}` |
+| `phone` | **yes** | Tenant contact number, free-form, max 32 chars. Sent as `phone_number` to the user master |
 | `admin_username` | **yes** | Must be unused platform-wide |
 | `admin_password` | **yes** | Django password validators enforced |
-| `admin_email` | no | |
+| `admin_email` | **yes** | |
+| `admin_first_name`, `admin_last_name` | no | Default `""`. Fall back to the username and `"-"` when sent to the user master |
 
 **Response `201 Created`** (standard tenant shape — admin credentials are never echoed):
 
@@ -301,19 +310,115 @@ POST /api/v1/platform/tenants/
   "status": "active",
   "timezone": "Asia/Kolkata",
   "currency": "INR",
+  "phone": "+91 98765 43210",
   "settings": {},
+  "admin_central_user_id": "",
   "created_at": "2026-10-20T08:00:00Z",
-  "updated_at": "2026-10-20T08:00:00Z"
+  "updated_at": "2026-10-20T08:00:00Z",
+  "currency_registration": {
+    "status": "registered",
+    "detail": "INR registered for DREAMS001."
+  },
+  "central_user_registration": {
+    "status": "registered",
+    "central_user_id": "12",
+    "detail": "Registered in the central user master."
+  }
 }
 ```
 
+**Central currency registration** — after the tenant + admin are committed, the
+backend also POSTs the tenant's currency to the central currency master
+(`https://centralmastermanagement.imcbs.com/api/currency-master/currencies/`):
+
+```json
+{
+  "client_id": "DREAMS001",
+  "code": "INR",
+  "name": "Indian Rupee",
+  "status": "ACTIVE"
+}
+```
+
+| `currency_registration.status` | Meaning |
+|---|---|
+| `registered` | New record created in the currency master |
+| `skipped` | Tenant code + currency pair already present (checked with a read first), or `CENTRAL_CURRENCY_SYNC_ENABLED=false` |
+| `failed` | Master unreachable or returned an error |
+
+> `client_id` is the tenant `code`. `name` comes from a built-in ISO map for the
+> seven currencies offered by the tenant form (`AED`, `BHD`, `INR`, `KWD`, `OMR`,
+> `QAR`, `SAR`); any other code is sent as its own name. This call is
+> **best-effort**: the tenant is already created, so a `failed` status never rolls
+> it back — the outcome is surfaced in the response and in the audit log
+> (`platform.tenant.currency_registered`).
+
 > The created admin can log in **immediately**: `POST /auth/login/` with `tenant_code: "DREAMS001"`, `admin_username`, and the password you set — role `tenant_admin`. Tenant + user + membership are created atomically; if anything fails, nothing is persisted.
+
+**Central user registration** — after the currency step, the first tenant admin is
+also POSTed to the central user master
+(`https://centralmastermanagement.imcbs.com/api/user-master/`):
+
+```json
+{
+  "client_id": "DREAMS001",
+  "first_name": "John",
+  "last_name": "Doe",
+  "username": "dreams_admin",
+  "password": "DreamsAdmin123!",
+  "email": "admin@dreams.example",
+  "phone_number": "+91 9876543210",
+  "user_role": "ADMIN",
+  "trellisco": false,
+  "claudius": false,
+  "melone": false,
+  "tixelise": true,
+  "trellisco_crm": false,
+  "melone_stay": false,
+  "trellisco_books": false,
+  "status": "ACTIVE"
+}
+```
+
+| `central_user_registration.status` | Meaning |
+|---|---|
+| `registered` | Account created, or confirmed after a lost response; its `id` was read back and stored on the membership |
+| `skipped` | A record for this `client_id` + `username` already existed and its id was adopted, this admin is already linked, or `CENTRAL_USER_SYNC_ENABLED=false` |
+| `failed` | Master unreachable, rejected the request, or no password was supplied |
+
+> `client_id` is the tenant `code`. Only `tixelise` is `true`; the other six product
+> flags are always sent as `false`. `user_role` is `ADMIN`.
+> The stored id (`TenantMembership.central_user_id`, surfaced read-only as
+> `admin_central_user_id`) is what makes deletion possible later.
+>
+> This call is **best-effort** and never rolls the tenant back. A `failed` status is
+> returned to the UI together with a retry path (`4.7`) and recorded in the audit
+> log as `platform.tenant.central_user_registered`.
+>
+> **Security note:** the master stores and exposes this password in plaintext over
+> an unauthenticated `GET /api/user-master/` list. The password is never logged or
+> stored by Tixelise, but it is visible on the master's side.
+>
+> **Master response contract:** `POST` answers `201 {"message": "User created
+> successfully."}` — it does **not** return the new `id`. The id is therefore read
+> back from `GET /api/user-master/` by matching `client_id` + `username`. If that
+> read-back fails, the account still counts as `registered` but
+> `central_user_id` stays empty, so deletion cannot remove it until `4.7` runs.
+>
+> The master enforces uniqueness **per `client_id`** on `username`, `email` and
+> `phone_number` — the tenant `phone` cannot be reused by a second admin of the
+> same client. A rejection names the offending field in `detail`, e.g.
+> `Central master rejected the request (HTTP 400: {"phone_number": [...]})`.
+>
+> Central calls allow 20s and retry once on a transport failure. A failed `POST`
+> is always followed by a lookup before failure is reported, so a write whose
+> response was lost is reported as `registered` rather than as an outage.
 
 **Errors:**
 
 | Status | Code | Cause |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | Missing `admin_username`/`admin_password`, duplicate `code`, duplicate username, weak password |
+| 400 | `VALIDATION_ERROR` | Missing `admin_username`/`admin_password`/`admin_email`/`phone`, duplicate `code`, duplicate username, weak password |
 
 > `status` always starts as `active`; `id/status/created_at/updated_at` are read-only.
 
@@ -347,6 +452,31 @@ PATCH /api/v1/platform/tenants/1/
 **Response `200 OK`:** the full tenant object (as in 4.1).
 
 > `status` cannot be changed here — use the action endpoints below.
+
+**Delete tenant:**
+
+```
+DELETE /api/v1/platform/tenants/1/
+```
+
+Deletes the tenant and all tenant-owned business data (events, categories, prices,
+staff, assignments, sales, tickets) in dependency-safe order, then removes the
+tenant's accounts from the central user master.
+
+Login identities go too, but only the ones this deletion orphaned: a `User`
+survives when it is a platform admin (`is_platform_admin`/`is_superuser`), still
+holds a membership in another tenant, or still has a staff profile. Audit history
+is always kept (`tenant=NULL`, `actor=NULL`, the username preserved in
+`actor_label`), and the `platform.tenant.deleted` audit entry records the
+per-account outcome under `central_users` plus the row counts under `deleted`.
+
+**Response `204 No Content`.**
+
+> The central delete happens **after** the local delete and is never fatal: a
+> master outage leaves the tenant deleted and the account recorded for manual
+> cleanup, rather than blocking the operation. Before deleting, the backend
+> re-reads each record and refuses to touch it unless `client_id` matches the
+> tenant code **and** `tixelise` is `true`.
 
 ### 4.3 Activate tenant
 
@@ -389,6 +519,82 @@ POST /api/v1/platform/tenants/1/deactivate/
 ```
 
 **Platform errors:** `403 NOT_PLATFORM_ADMIN` if a tenant-scoped token is used; `404 NOT_FOUND` for unknown tenant id.
+
+### 4.6 Tenant currency options
+
+```
+GET /api/v1/platform/tenant-currencies/
+```
+
+Feeds the currency dropdown on the tenant create/edit forms. The backend proxies
+the central financial-year master so the browser never calls a third-party host
+(cached for 5 minutes; a built-in list of the same countries is used when the
+master cannot be reached).
+
+**Response `200 OK`:**
+
+```json
+{
+  "source": "remote",
+  "results": [
+    {
+      "country_code": "IN",
+      "country_name": "INDIA",
+      "currency_code": "INR",
+      "fy_from_month": "APRIL",
+      "fy_to_month": "MARCH",
+      "remark": "Financial year April to March"
+    }
+  ]
+}
+```
+
+> `source` is `remote` when the central master answered, `fallback` when the
+> built-in list was used. Results are sorted by country name. Selecting an
+> option sets `currency` and stores `country_code`/`country_name`/`fiscal_year`
+> inside the tenant's `settings` object.
+
+### 4.7 Retry central registration
+
+```
+POST /api/v1/platform/tenants/1/sync-central/
+```
+
+Re-runs the currency-master and user-master registrations for an existing tenant.
+The first attempt during creation is best-effort, and the create form cannot be
+submitted twice (duplicate `code`), so this is the only recovery path.
+
+**Request** (both optional — send `password` only when the central account does not
+ exist yet):
+
+```json
+{ "password": "DreamsAdmin123!" }
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "currency": { "status": "registered", "detail": "INR registered for DREAMS001." },
+  "user": {
+    "status": "registered",
+    "central_user_id": "12",
+    "detail": "Registered in the central user master."
+  }
+}
+```
+
+> Idempotent. If the account already exists in the master it is adopted
+> (`status: "skipped"`) instead of duplicated, so calling this repeatedly is
+> safe. Without a `password` and with no existing record, `user.status` is
+> `failed` and `detail` says a password is required. Audited as
+> `platform.tenant.central_sync`.
+>
+> This is the only path that pre-checks the master list — a fresh create skips
+> that lookup because a brand-new username cannot already exist there. Use it to
+> recover a `central_user_id` that the create-time read-back could not capture.
+
+**Errors:** `404 NOT_FOUND` for an unknown tenant or missing tenant admin.
 
 ---
 
@@ -679,7 +885,6 @@ POST /api/v1/admin/staff/
 ```
 
 **Create request** (creates User + POS membership + StaffProfile in one transaction):
-
 ```json
 {
   "staff_code": "ST012",
@@ -705,11 +910,33 @@ POST /api/v1/admin/staff/
   "created_by": 2,
   "created_at": "2026-10-20T08:10:00Z",
   "updated_at": "2026-10-20T08:10:00Z",
-  "last_login": null
+  "last_login": null,
+  "central_user_registration": {
+    "status": "registered",
+    "central_user_id": "9",
+    "detail": "Linked to central user 9."
+  }
 }
 ```
 
-**Errors:** `400 VALIDATION_ERROR` — username taken, weak password (Django validators), duplicate `staff_code` in tenant.
+**Errors:** `400 VALIDATION_ERROR` — username taken, weak password (Django validators), duplicate `staff_code` in tenant, missing/ invalid `email` or `phone`.
+
+> **Central user registration.** `email` and `phone` are required because the
+> staff member is also POSTed to the central user master
+> (`https://centralmastermanagement.imcbs.com/api/user-master/`) with
+> `user_role: "USER"`, the staff member's own `phone_number`, and `client_id`
+> set to the tenant `code`. Everything else matches the tenant-admin payload,
+> which uses `user_role: "ADMIN"` — the master accepts only those two values,
+> and a POS staff account is a `USER` on its side.
+> The master enforces `username`, `email` and `phone_number` uniqueness **per
+> `client_id`**, so a second staff member cannot reuse a number already used in
+> the same tenant. The call runs after the local transaction commits: an outage
+> never blocks or rolls back the staff row — `central_user_registration.status`
+> reports `registered`, `skipped` (sync disabled) or `failed`, and the same
+> meanings apply as in §4.1. There is no staff-level retry endpoint yet: a
+> `failed` staff member is re-registered by running
+> `apps.platform_admin.views._register_central_user` for that membership (the
+> upstream master is idempotent per `client_id` + `username`).
 
 #### Staff detail / update
 

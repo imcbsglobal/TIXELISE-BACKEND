@@ -165,3 +165,21 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 5  # 5 MB request cap
+
+# ---------------------------------------------------------------------------
+# Central master integration
+# ---------------------------------------------------------------------------
+# When a tenant is created, its currency is registered in the central currency
+# master. Disable with CENTRAL_CURRENCY_SYNC_ENABLED=false (tests turn this off
+# so they never write to the third-party service).
+CENTRAL_CURRENCY_SYNC_ENABLED = os.environ.get(
+    "CENTRAL_CURRENCY_SYNC_ENABLED", "true"
+).strip().lower() not in {"0", "false", "no", "off"}
+
+# When a tenant is created, its admin is registered in the central user master
+# and removed again when the tenant is deleted. Disable with
+# CENTRAL_USER_SYNC_ENABLED=false (tests turn this off so they never write to
+# the third-party service).
+CENTRAL_USER_SYNC_ENABLED = os.environ.get(
+    "CENTRAL_USER_SYNC_ENABLED", "true"
+).strip().lower() not in {"0", "false", "no", "off"}

@@ -29,7 +29,7 @@ class Event(TenantOwnedModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "events_event_tixelise"
+        db_table = "tixelise_events_event"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "code"], name="uniq_tenant_event_code"

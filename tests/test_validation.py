@@ -53,6 +53,8 @@ class DuplicateConstraintTests(APITestBase):
                 "staff_code": "st012",
                 "display_name": "Another Ravi",
                 "username": "ravi2",
+                "email": "ravi2@example.com",
+                "phone": "+919876500022",
                 "password": "StaffPass123!",
             },
             format="json",

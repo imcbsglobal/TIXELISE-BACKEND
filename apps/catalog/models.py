@@ -18,7 +18,7 @@ class TicketCategory(TenantOwnedModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "catalog_ticketcategory_tixelise"
+        db_table = "tixelise_catalog_ticketcategory"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "code"], name="uniq_tenant_category_code"
@@ -50,7 +50,7 @@ class EventPrice(TenantOwnedModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "catalog_eventprice_tixelise"
+        db_table = "tixelise_catalog_eventprice"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "event", "category"], name="uniq_tenant_event_category_price"
@@ -84,7 +84,7 @@ class TicketTemplate(TenantOwnedModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "catalog_tickettemplate_tixelise"
+        db_table = "tixelise_catalog_tickettemplate"
         ordering = ["-created_at"]
 
     def __str__(self):

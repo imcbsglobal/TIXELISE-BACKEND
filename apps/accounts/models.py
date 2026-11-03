@@ -21,7 +21,7 @@ class User(AbstractUser):
         ),
         related_name="user_set",
         related_query_name="user",
-        db_table="accounts_user_groups_tixelise",
+        db_table="tixelise_accounts_user_groups",
     )
     user_permissions = models.ManyToManyField(
         "auth.Permission",
@@ -30,11 +30,11 @@ class User(AbstractUser):
         help_text=_("Specific permissions for this user."),
         related_name="user_set",
         related_query_name="user",
-        db_table="accounts_user_user_permissions_tixelise",
+        db_table="tixelise_accounts_user_user_permissions",
     )
 
     class Meta(AbstractUser.Meta):
-        db_table = "accounts_user_tixelise"
+        db_table = "tixelise_accounts_user"
 
     def save(self, *args, **kwargs):
         # Every Django superuser is automatically a platform admin —

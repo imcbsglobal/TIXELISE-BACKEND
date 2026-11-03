@@ -24,7 +24,7 @@ class StaffEventAssignment(TenantOwnedModel):
         "catalog.TicketCategory",
         blank=True,
         related_name="assignments",
-        db_table="assignments_staffeventassignment_allowed_categories_tixelise",
+        db_table="tixelise_assignments_staffeventassignment_allowed_categories",
     )
     restrict_categories = models.BooleanField(
         default=False,
@@ -37,7 +37,7 @@ class StaffEventAssignment(TenantOwnedModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "assignments_staffeventassignment_tixelise"
+        db_table = "tixelise_assignments_staffeventassignment"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "staff", "event"], name="uniq_tenant_staff_event"

@@ -3,40 +3,42 @@
 ## 1. Current table inventory
 
 The current SQLite database contains **25 tables**: **18 application tables**
-and **7 Django framework tables**. Application tables use the `_tixelise`
-suffix. Django framework table names are unchanged.
+and **7 Django framework tables**. Application tables use the `tixelise_`
+prefix. Django framework table names are unchanged.
 
 | # | Table name | Ownership |
 |---:|---|---|
-| 1 | `accounts_user_groups_tixelise` | Application |
-| 2 | `accounts_user_tixelise` | Application |
-| 3 | `accounts_user_user_permissions_tixelise` | Application |
-| 4 | `assignments_staffeventassignment_allowed_categories_tixelise` | Application |
-| 5 | `assignments_staffeventassignment_tixelise` | Application |
-| 6 | `audit_auditlog_tixelise` | Application |
-| 7 | `auth_group` | Django framework |
-| 8 | `auth_group_permissions` | Django framework |
-| 9 | `auth_permission` | Django framework |
-| 10 | `catalog_eventprice_tixelise` | Application |
-| 11 | `catalog_ticketcategory_tixelise` | Application |
-| 12 | `catalog_tickettemplate_tixelise` | Application |
-| 13 | `django_admin_log` | Django framework |
-| 14 | `django_content_type` | Django framework |
-| 15 | `django_migrations` | Django framework |
-| 16 | `django_session` | Django framework |
-| 17 | `events_event_tixelise` | Application |
-| 18 | `sales_idempotencyrecord_tixelise` | Application |
-| 19 | `sales_sale_tixelise` | Application |
-| 20 | `sales_saleitem_tixelise` | Application |
-| 21 | `staff_staffprofile_tixelise` | Application |
-| 22 | `tenancy_tenant_tixelise` | Application |
-| 23 | `tenancy_tenantmembership_tixelise` | Application |
-| 24 | `ticketing_ticket_tixelise` | Application |
-| 25 | `ticketing_ticketsequence_tixelise` | Application |
+| 1 | `auth_group` | Django framework |
+| 2 | `auth_group_permissions` | Django framework |
+| 3 | `auth_permission` | Django framework |
+| 4 | `django_admin_log` | Django framework |
+| 5 | `django_content_type` | Django framework |
+| 6 | `django_migrations` | Django framework |
+| 7 | `django_session` | Django framework |
+| 8 | `tixelise_accounts_user` | Application |
+| 9 | `tixelise_accounts_user_groups` | Application |
+| 10 | `tixelise_accounts_user_user_permissions` | Application |
+| 11 | `tixelise_assignments_staffeventassignment` | Application |
+| 12 | `tixelise_assignments_staffeventassignment_allowed_categories` | Application |
+| 13 | `tixelise_audit_auditlog` | Application |
+| 14 | `tixelise_catalog_eventprice` | Application |
+| 15 | `tixelise_catalog_ticketcategory` | Application |
+| 16 | `tixelise_catalog_tickettemplate` | Application |
+| 17 | `tixelise_events_event` | Application |
+| 18 | `tixelise_sales_idempotencyrecord` | Application |
+| 19 | `tixelise_sales_sale` | Application |
+| 20 | `tixelise_sales_saleitem` | Application |
+| 21 | `tixelise_staff_staffprofile` | Application |
+| 22 | `tixelise_tenancy_tenant` | Application |
+| 23 | `tixelise_tenancy_tenantmembership` | Application |
+| 24 | `tixelise_ticketing_ticket` | Application |
+| 25 | `tixelise_ticketing_ticketsequence` | Application |
 
 This inventory reflects the checked-in database file and models as of
-2026-10-24. The database configured at runtime can differ when `DATABASE_URL`
-points to another database.
+2026-11-03. Application tables were renamed from the former
+`<app>_<model>_tixelise` form to the `tixelise_<app>_<model>` form by the
+per-app `0003_*` migrations. The database configured at runtime can differ when
+`DATABASE_URL` points to another database.
 
 ## 2. Database and application architecture
 
@@ -53,7 +55,7 @@ One configured database ("default")
   - SQLite: backend/db.sqlite3 by default
   - PostgreSQL: when DATABASE_URL is configured
         |
-        +-- Application tables (18, names end in _tixelise)
+        +-- Application tables (18, tixelise_ prefix)
         +-- Django framework tables (7, standard names)
 ```
 
@@ -65,12 +67,12 @@ One configured database ("default")
   connection to the URL-configured database; the application does not create a
   separate database for each tenant.
 - All tenants share the same database and tables. Tenant-owned rows are
-  associated with `tenancy_tenant_tixelise` using `tenant_id`.
+  associated with `tixelise_tenancy_tenant` using `tenant_id`.
 - Tenant identity is resolved by backend authentication and middleware from
   verified JWT claims. Tenant-aware managers scope tenant-owned model
   queries. This is application-level isolation, not a separate schema or
   database per tenant.
-- Migrations change the database schema. The table-suffix migrations use
+- Migrations change the database schema. The table-prefix migrations use
   Django model table alterations to rename application tables; they do not
   rename the Django framework tables.
 - Django’s `django_migrations` table records which migrations were applied.
@@ -82,55 +84,55 @@ The diagram shows the principal foreign-key and many-to-many relationships.
 
 ```mermaid
 erDiagram
-    tenancy_tenant_tixelise ||--o{ tenancy_tenantmembership_tixelise : has
-    accounts_user_tixelise ||--o{ tenancy_tenantmembership_tixelise : joins
+    tixelise_tenancy_tenant ||--o{ tixelise_tenancy_tenantmembership : has
+    tixelise_accounts_user ||--o{ tixelise_tenancy_tenantmembership : joins
 
-    tenancy_tenant_tixelise ||--o{ events_event_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ catalog_ticketcategory_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ catalog_tickettemplate_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ catalog_eventprice_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ staff_staffprofile_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ assignments_staffeventassignment_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ sales_sale_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ sales_idempotencyrecord_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ ticketing_ticket_tixelise : owns
-    tenancy_tenant_tixelise ||--o{ ticketing_ticketsequence_tixelise : owns
-    tenancy_tenant_tixelise o|--o{ audit_auditlog_tixelise : scopes
+    tixelise_tenancy_tenant ||--o{ tixelise_events_event : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_catalog_ticketcategory : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_catalog_tickettemplate : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_catalog_eventprice : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_staff_staffprofile : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_assignments_staffeventassignment : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_sales_sale : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_sales_idempotencyrecord : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_ticketing_ticket : owns
+    tixelise_tenancy_tenant ||--o{ tixelise_ticketing_ticketsequence : owns
+    tixelise_tenancy_tenant o|--o{ tixelise_audit_auditlog : scopes
 
-    accounts_user_tixelise ||--o{ staff_staffprofile_tixelise : user_profile
-    accounts_user_tixelise ||--o{ events_event_tixelise : created_by
-    accounts_user_tixelise ||--o{ assignments_staffeventassignment_tixelise : created_by
-    accounts_user_tixelise ||--o{ sales_sale_tixelise : created_by
-    accounts_user_tixelise ||--o{ sales_idempotencyrecord_tixelise : actor
-    accounts_user_tixelise o|--o{ audit_auditlog_tixelise : actor
+    tixelise_accounts_user ||--o{ tixelise_staff_staffprofile : user_profile
+    tixelise_accounts_user ||--o{ tixelise_events_event : created_by
+    tixelise_accounts_user ||--o{ tixelise_assignments_staffeventassignment : created_by
+    tixelise_accounts_user ||--o{ tixelise_sales_sale : created_by
+    tixelise_accounts_user ||--o{ tixelise_sales_idempotencyrecord : actor
+    tixelise_accounts_user o|--o{ tixelise_audit_auditlog : actor
 
-    events_event_tixelise ||--o{ catalog_eventprice_tixelise : priced_by
-    catalog_ticketcategory_tixelise ||--o{ catalog_eventprice_tixelise : priced_category
-    events_event_tixelise ||--o{ assignments_staffeventassignment_tixelise : assigned_event
-    staff_staffprofile_tixelise ||--o{ assignments_staffeventassignment_tixelise : assigned_staff
-    assignments_staffeventassignment_tixelise ||--o{ assignments_staffeventassignment_allowed_categories_tixelise : category_links
-    catalog_ticketcategory_tixelise ||--o{ assignments_staffeventassignment_allowed_categories_tixelise : allowed_category
+    tixelise_events_event ||--o{ tixelise_catalog_eventprice : priced_by
+    tixelise_catalog_ticketcategory ||--o{ tixelise_catalog_eventprice : priced_category
+    tixelise_events_event ||--o{ tixelise_assignments_staffeventassignment : assigned_event
+    tixelise_staff_staffprofile ||--o{ tixelise_assignments_staffeventassignment : assigned_staff
+    tixelise_assignments_staffeventassignment ||--o{ tixelise_assignments_staffeventassignment_allowed_categories : category_links
+    tixelise_catalog_ticketcategory ||--o{ tixelise_assignments_staffeventassignment_allowed_categories : allowed_category
 
-    events_event_tixelise ||--o{ sales_sale_tixelise : sold_at
-    staff_staffprofile_tixelise ||--o{ sales_sale_tixelise : sold_by
-    sales_sale_tixelise ||--o{ sales_saleitem_tixelise : contains
-    catalog_ticketcategory_tixelise ||--o{ sales_saleitem_tixelise : item_category
-    sales_sale_tixelise o|--o{ sales_idempotencyrecord_tixelise : retries
+    tixelise_events_event ||--o{ tixelise_sales_sale : sold_at
+    tixelise_staff_staffprofile ||--o{ tixelise_sales_sale : sold_by
+    tixelise_sales_sale ||--o{ tixelise_sales_saleitem : contains
+    tixelise_catalog_ticketcategory ||--o{ tixelise_sales_saleitem : item_category
+    tixelise_sales_sale o|--o{ tixelise_sales_idempotencyrecord : retries
 
-    sales_sale_tixelise ||--o{ ticketing_ticket_tixelise : issues
-    events_event_tixelise ||--o{ ticketing_ticket_tixelise : for_event
-    staff_staffprofile_tixelise ||--o{ ticketing_ticket_tixelise : issued_by
-    catalog_ticketcategory_tixelise ||--o{ ticketing_ticket_tixelise : ticket_category
-    events_event_tixelise ||--o{ ticketing_ticketsequence_tixelise : sequence_for
+    tixelise_sales_sale ||--o{ tixelise_ticketing_ticket : issues
+    tixelise_events_event ||--o{ tixelise_ticketing_ticket : for_event
+    tixelise_staff_staffprofile ||--o{ tixelise_ticketing_ticket : issued_by
+    tixelise_catalog_ticketcategory ||--o{ tixelise_ticketing_ticket : ticket_category
+    tixelise_events_event ||--o{ tixelise_ticketing_ticketsequence : sequence_for
 
-    accounts_user_tixelise ||--o{ accounts_user_groups_tixelise : group_links
-    auth_group ||--o{ accounts_user_groups_tixelise : user_group
-    accounts_user_tixelise ||--o{ accounts_user_user_permissions_tixelise : permission_links
-    auth_permission ||--o{ accounts_user_user_permissions_tixelise : user_permission
+    tixelise_accounts_user ||--o{ tixelise_accounts_user_groups : group_links
+    auth_group ||--o{ tixelise_accounts_user_groups : user_group
+    tixelise_accounts_user ||--o{ tixelise_accounts_user_user_permissions : permission_links
+    auth_permission ||--o{ tixelise_accounts_user_user_permissions : user_permission
     auth_group ||--o{ auth_group_permissions : group_permission_links
     auth_permission ||--o{ auth_group_permissions : permission
     django_content_type ||--o{ auth_permission : defines
-    accounts_user_tixelise ||--o{ django_admin_log : admin_actions
+    tixelise_accounts_user ||--o{ django_admin_log : admin_actions
     django_content_type o|--o{ django_admin_log : logged_object_type
 ```
 
@@ -147,34 +149,34 @@ are foreign-key columns. `NULL` means a relationship is optional.
 
 | Table | Columns and relationships |
 |---|---|
-| `tenancy_tenant_tixelise` | `id`, `code` (unique), `name`, `status`, `timezone`, `currency`, `settings`, `created_at`, `updated_at`. Root record for a tenant and its tenant-owned data. |
-| `accounts_user_tixelise` | `id`, `password` (Django password hash), `last_login`, `is_superuser`, `username` (unique), `first_name`, `last_name`, `email`, `is_staff`, `is_active`, `date_joined`, `is_platform_admin`. Global user identity; not itself tenant-owned. |
-| `tenancy_tenantmembership_tixelise` | `id`, `tenant_id` → tenant, `user_id` → user, `role`, `status`, `created_at`, `updated_at`. Unique per `(tenant_id, user_id)`. Connects users to tenants and their roles. |
-| `accounts_user_groups_tixelise` | `id`, `user_id` → user, `group_id` → `auth_group`. Many-to-many link between users and Django groups. |
-| `accounts_user_user_permissions_tixelise` | `id`, `user_id` → user, `permission_id` → `auth_permission`. Many-to-many link between users and individual permissions. |
+| `tixelise_tenancy_tenant` | `id`, `code` (unique), `name`, `status`, `timezone`, `currency`, `phone`, `settings`, `created_at`, `updated_at`. Root record for a tenant and its tenant-owned data. |
+| `tixelise_accounts_user` | `id`, `password` (Django password hash), `last_login`, `is_superuser`, `username` (unique), `first_name`, `last_name`, `email`, `is_staff`, `is_active`, `date_joined`, `is_platform_admin`. Global user identity; not itself tenant-owned. |
+| `tixelise_tenancy_tenantmembership` | `id`, `tenant_id` → tenant, `user_id` → user, `role`, `status`, `central_user_id`, `created_at`, `updated_at`. Unique per `(tenant_id, user_id)`. Connects users to tenants and their roles; `central_user_id` holds the linked account id in the central user master (`''` until registered). |
+| `tixelise_accounts_user_groups` | `id`, `user_id` → user, `group_id` → `auth_group`. Many-to-many link between users and Django groups. |
+| `tixelise_accounts_user_user_permissions` | `id`, `user_id` → user, `permission_id` → `auth_permission`. Many-to-many link between users and individual permissions. |
 
 ### Events, catalog, staff, and assignments
 
 | Table | Columns and relationships |
 |---|---|
-| `events_event_tixelise` | `id`, `tenant_id` → tenant, `code`, `name`, `description`, `venue`, `address`, `start_at`, `end_at`, `sales_start_at`, `sales_end_at`, `status`, nullable `created_by_id` → user, `created_at`, `updated_at`. Unique per `(tenant_id, code)`; `end_at` must be after `start_at`. |
-| `catalog_ticketcategory_tixelise` | `id`, `tenant_id` → tenant, `code`, `name`, `description`, `status`, `created_at`, `updated_at`. Unique per `(tenant_id, code)`. |
-| `catalog_eventprice_tixelise` | `id`, `tenant_id` → tenant, `event_id` → event, `category_id` → ticket category, `amount`, `currency`, `effective_from`, `effective_to`, `status`, `created_at`, `updated_at`. Unique per `(tenant_id, event_id, category_id)`; `amount` must be non-negative. |
-| `catalog_tickettemplate_tixelise` | `id`, `tenant_id` → tenant, `name`, `config`, `version`, `status`, `created_at`, `updated_at`. Stores tenant-specific ticket layout/configuration data. |
-| `staff_staffprofile_tixelise` | `id`, `tenant_id` → tenant, `user_id` → user, `staff_code`, `display_name`, `phone`, `email`, `status`, nullable `created_by_id` → user, `created_at`, `updated_at`, `last_login`. Unique per `(tenant_id, staff_code)` and `(tenant_id, user_id)`. |
-| `assignments_staffeventassignment_tixelise` | `id`, `tenant_id` → tenant, `staff_id` → staff profile, `event_id` → event, `status`, `valid_from`, `valid_until`, `restrict_categories`, nullable `created_by_id` → user, `created_at`, `updated_at`. Unique per `(tenant_id, staff_id, event_id)`. |
-| `assignments_staffeventassignment_allowed_categories_tixelise` | `id`, `staffeventassignment_id` → assignment, `ticketcategory_id` → ticket category. Many-to-many list of categories allowed by an assignment. |
+| `tixelise_events_event` | `id`, `tenant_id` → tenant, `code`, `name`, `description`, `venue`, `address`, `start_at`, `end_at`, `sales_start_at`, `sales_end_at`, `status`, nullable `created_by_id` → user, `created_at`, `updated_at`. Unique per `(tenant_id, code)`; `end_at` must be after `start_at`. |
+| `tixelise_catalog_ticketcategory` | `id`, `tenant_id` → tenant, `code`, `name`, `description`, `status`, `created_at`, `updated_at`. Unique per `(tenant_id, code)`. |
+| `tixelise_catalog_eventprice` | `id`, `tenant_id` → tenant, `event_id` → event, `category_id` → ticket category, `amount`, `currency`, `effective_from`, `effective_to`, `status`, `created_at`, `updated_at`. Unique per `(tenant_id, event_id, category_id)`; `amount` must be non-negative. |
+| `tixelise_catalog_tickettemplate` | `id`, `tenant_id` → tenant, `name`, `config`, `version`, `status`, `created_at`, `updated_at`. Stores tenant-specific ticket layout/configuration data. |
+| `tixelise_staff_staffprofile` | `id`, `tenant_id` → tenant, `user_id` → user, `staff_code`, `display_name`, `phone`, `email`, `status`, nullable `created_by_id` → user, `created_at`, `updated_at`, `last_login`. Unique per `(tenant_id, staff_code)` and `(tenant_id, user_id)`. |
+| `tixelise_assignments_staffeventassignment` | `id`, `tenant_id` → tenant, `staff_id` → staff profile, `event_id` → event, `status`, `valid_from`, `valid_until`, `restrict_categories`, nullable `created_by_id` → user, `created_at`, `updated_at`. Unique per `(tenant_id, staff_id, event_id)`. |
+| `tixelise_assignments_staffeventassignment_allowed_categories` | `id`, `staffeventassignment_id` → assignment, `ticketcategory_id` → ticket category. Many-to-many list of categories allowed by an assignment. |
 
 ### Sales, tickets, and audit
 
 | Table | Columns and relationships |
 |---|---|
-| `sales_sale_tixelise` | `id`, `tenant_id` → tenant, `sale_reference`, `event_id` → event, `staff_id` → staff profile, `status`, `gross_total`, `refund_total`, `currency`, nullable `created_by_id` → user, `created_at`, `updated_at`. Unique per `(tenant_id, sale_reference)`. |
-| `sales_saleitem_tixelise` | `id`, `sale_id` → sale, `category_id` → ticket category, `quantity`, `unit_price_snapshot`, `line_total`. Each line belongs to a sale and captures the price at sale time. It has no direct tenant foreign key; tenant ownership is reached through its sale. |
-| `sales_idempotencyrecord_tixelise` | `id`, `tenant_id` → tenant, `actor_id` → user, `idempotency_key`, `request_hash`, nullable `sale_id` → sale, `status`, `created_at`, `expires_at`. Unique per `(tenant_id, actor_id, idempotency_key)`. |
-| `ticketing_ticketsequence_tixelise` | `id`, `tenant_id` → tenant, `event_id` → event, `last_number`, `updated_at`. Unique per `(tenant_id, event_id)`; stores the next ticket-number state for an event. |
-| `ticketing_ticket_tixelise` | UUID `id` (primary key), `tenant_id` → tenant, `ticket_code` (unique), `event_id` → event, `staff_id` → staff profile, `sale_id` → sale, `category_id` → ticket category, `sequence_number`, `status`, `issued_at`, `reprint_count`. Unique per `(tenant_id, event_id, sequence_number)`. |
-| `audit_auditlog_tixelise` | `id`, nullable `tenant_id` → tenant, nullable `actor_id` → user, `actor_label`, `action`, `target_type`, `target_id`, `correlation_id`, `metadata`, `created_at`. Nullable tenant and actor allow platform-wide events or records whose related user/tenant is removed. |
+| `tixelise_sales_sale` | `id`, `tenant_id` → tenant, `sale_reference`, `event_id` → event, `staff_id` → staff profile, `status`, `gross_total`, `refund_total`, `currency`, nullable `created_by_id` → user, `created_at`, `updated_at`. Unique per `(tenant_id, sale_reference)`. |
+| `tixelise_sales_saleitem` | `id`, `sale_id` → sale, `category_id` → ticket category, `quantity`, `unit_price_snapshot`, `line_total`. Each line belongs to a sale and captures the price at sale time. It has no direct tenant foreign key; tenant ownership is reached through its sale. |
+| `tixelise_sales_idempotencyrecord` | `id`, `tenant_id` → tenant, `actor_id` → user, `idempotency_key`, `request_hash`, nullable `sale_id` → sale, `status`, `created_at`, `expires_at`. Unique per `(tenant_id, actor_id, idempotency_key)`. |
+| `tixelise_ticketing_ticketsequence` | `id`, `tenant_id` → tenant, `event_id` → event, `last_number`, `updated_at`. Unique per `(tenant_id, event_id)`; stores the next ticket-number state for an event. |
+| `tixelise_ticketing_ticket` | UUID `id` (primary key), `tenant_id` → tenant, `ticket_code` (unique), `event_id` → event, `staff_id` → staff profile, `sale_id` → sale, `category_id` → ticket category, `sequence_number`, `status`, `issued_at`, `reprint_count`. Unique per `(tenant_id, event_id, sequence_number)`. |
+| `tixelise_audit_auditlog` | `id`, nullable `tenant_id` → tenant, nullable `actor_id` → user, `actor_label`, `action`, `target_type`, `target_id`, `correlation_id`, `metadata`, `created_at`. Nullable tenant and actor allow platform-wide events or records whose related user/tenant is removed. |
 
 ## 5. Django framework table reference
 
@@ -182,7 +184,7 @@ These tables are maintained by Django and keep their standard names.
 
 | Table | Purpose and principal relationships |
 |---|---|
-| `auth_group` | Django permission groups. Linked to users through `accounts_user_groups_tixelise` and to permissions through `auth_group_permissions`. |
+| `auth_group` | Django permission groups. Linked to users through `tixelise_accounts_user_groups` and to permissions through `auth_group_permissions`. |
 | `auth_group_permissions` | Many-to-many join table: `group_id` → `auth_group`, `permission_id` → `auth_permission`. |
 | `auth_permission` | Permission definitions. `content_type_id` → `django_content_type`; linked to groups and users through their join tables. |
 | `django_admin_log` | Django admin history. `user_id` → application user; nullable `content_type_id` → `django_content_type`. |
@@ -192,15 +194,20 @@ These tables are maintained by Django and keep their standard names.
 
 ## 6. Relationship and tenancy notes
 
-- **Tenant root:** `tenancy_tenant_tixelise` is the ownership root for tenant
+- **Tenant root:** `tixelise_tenancy_tenant` is the ownership root for tenant
   records. Events, catalog records, staff profiles, assignments, sales,
   idempotency records, tickets, and ticket sequences carry a `tenant_id`.
-- **Membership:** `tenancy_tenantmembership_tixelise` joins a global user to a
+- **Membership:** `tixelise_tenancy_tenantmembership` joins a global user to a
   tenant and stores the user's tenant role and membership status. A user can
-  have memberships in multiple tenants.
-- **Identity versus staff:** `accounts_user_tixelise` represents a login
-  identity. `staff_staffprofile_tixelise` represents that user's staff role in
+  have memberships in multiple tenants. `central_user_id` records the primary
+  key of the same account in the external central user master, so the account
+  can be deleted when the tenant is permanently removed.
+- **Identity versus staff:** `tixelise_accounts_user` represents a login
+  identity. `tixelise_staff_staffprofile` represents that user's staff role in
   a particular tenant. A user can have staff profiles in different tenants.
+  Because an identity is not tenant data, deleting a tenant removes a `User`
+  only when it is left with no membership anywhere and no staff profile;
+  platform admins are never removed.
 - **Event/catalog:** Event prices connect a tenant, event, and ticket category.
   Ticket categories can be reused across events within a tenant.
 - **Assignment:** An assignment joins one staff profile to one event. Its
@@ -235,7 +242,7 @@ To inspect the current SQLite table names:
 
 ```powershell
 cd backend
-.venv\Scripts\python list_tables2.py
+.venv\Scripts\python manage.py shell -c "from django.db import connection; print('\n'.join(sorted(connection.introspection.table_names())))"
 ```
 
 The inventory above is a point-in-time reference. When models or migrations

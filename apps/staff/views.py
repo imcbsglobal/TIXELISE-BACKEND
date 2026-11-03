@@ -36,17 +36,23 @@ class StaffListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         profile = serializer.save()
+        registration = getattr(profile, "central_user_registration", None)
         record_audit(
             actor=request.user,
             tenant=profile.tenant,
             action="staff.created",
             target_type="staff_profile",
             target_id=profile.id,
-            metadata={"staff_code": profile.staff_code, "username": profile.user.username},
+            metadata={
+                "staff_code": profile.staff_code,
+                "username": profile.user.username,
+                "central_user": (registration or {}).get("status", ""),
+            },
         )
-        return Response(
-            StaffProfileSerializer(profile).data, status=status.HTTP_201_CREATED
-        )
+        payload = StaffProfileSerializer(profile).data
+        if registration is not None:
+            payload["central_user_registration"] = registration
+        return Response(payload, status=status.HTTP_201_CREATED)
 
 
 class StaffDetailView(generics.RetrieveUpdateAPIView):

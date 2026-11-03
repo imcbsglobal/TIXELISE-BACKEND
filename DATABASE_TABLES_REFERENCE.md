@@ -4,7 +4,12 @@
 > Generated on **2026-10-26** from `PRAGMA table_info`, `PRAGMA foreign_key_list`,
 > `PRAGMA index_list`, and the exact `CREATE TABLE` DDL in `sqlite_master`.
 >
-> **Total tables: 25** — 18 application tables (`_tixelise` suffix) + 7 Django framework tables.
+> **Total tables: 25** — 18 application tables (`tixelise_` prefix) + 7 Django framework tables.
+>
+> **Revision 2026-11-03:** application tables were renamed from the
+> `<app>_<model>_tixelise` suffix form to the `tixelise_<app>_<model>` prefix form.
+> Table, index, and foreign-key names below reflect the live database after that
+> migration; row counts remain the original 2026-10-26 snapshot.
 >
 > Notes
 > - Types shown are the exact SQLite types stored in the database.
@@ -23,24 +28,24 @@
 
 | # | Table | Owner | Django model | Rows |
 |---:|---|---|---|---:|
-| 1 | `tenancy_tenant_tixelise` | Application | `tenancy.Tenant` | 4 |
-| 2 | `accounts_user_tixelise` | Application | `accounts.User` | 11 |
-| 3 | `tenancy_tenantmembership_tixelise` | Application | `tenancy.TenantMembership` | 6 |
-| 4 | `accounts_user_groups_tixelise` | Application | `accounts.User.groups` (M2M) | 0 |
-| 5 | `accounts_user_user_permissions_tixelise` | Application | `accounts.User.user_permissions` (M2M) | 0 |
-| 6 | `events_event_tixelise` | Application | `events.Event` | 6 |
-| 7 | `catalog_ticketcategory_tixelise` | Application | `catalog.TicketCategory` | 6 |
-| 8 | `catalog_eventprice_tixelise` | Application | `catalog.EventPrice` | 10 |
-| 9 | `catalog_tickettemplate_tixelise` | Application | `catalog.TicketTemplate` | 0 |
-| 10 | `staff_staffprofile_tixelise` | Application | `staff.StaffProfile` | 3 |
-| 11 | `assignments_staffeventassignment_tixelise` | Application | `assignments.StaffEventAssignment` | 6 |
-| 12 | `assignments_staffeventassignment_allowed_categories_tixelise` | Application | `StaffEventAssignment.allowed_categories` (M2M) | 0 |
-| 13 | `sales_sale_tixelise` | Application | `sales.Sale` | 2 |
-| 14 | `sales_saleitem_tixelise` | Application | `sales.SaleItem` | 3 |
-| 15 | `sales_idempotencyrecord_tixelise` | Application | `sales.IdempotencyRecord` | 2 |
-| 16 | `ticketing_ticketsequence_tixelise` | Application | `ticketing.TicketSequence` | 2 |
-| 17 | `ticketing_ticket_tixelise` | Application | `ticketing.Ticket` | 5 |
-| 18 | `audit_auditlog_tixelise` | Application | `audit.AuditLog` | 134 |
+| 1 | `tixelise_tenancy_tenant` | Application | `tenancy.Tenant` | 4 |
+| 2 | `tixelise_accounts_user` | Application | `accounts.User` | 11 |
+| 3 | `tixelise_tenancy_tenantmembership` | Application | `tenancy.TenantMembership` | 6 |
+| 4 | `tixelise_accounts_user_groups` | Application | `accounts.User.groups` (M2M) | 0 |
+| 5 | `tixelise_accounts_user_user_permissions` | Application | `accounts.User.user_permissions` (M2M) | 0 |
+| 6 | `tixelise_events_event` | Application | `events.Event` | 6 |
+| 7 | `tixelise_catalog_ticketcategory` | Application | `catalog.TicketCategory` | 6 |
+| 8 | `tixelise_catalog_eventprice` | Application | `catalog.EventPrice` | 10 |
+| 9 | `tixelise_catalog_tickettemplate` | Application | `catalog.TicketTemplate` | 0 |
+| 10 | `tixelise_staff_staffprofile` | Application | `staff.StaffProfile` | 3 |
+| 11 | `tixelise_assignments_staffeventassignment` | Application | `assignments.StaffEventAssignment` | 6 |
+| 12 | `tixelise_assignments_staffeventassignment_allowed_categories` | Application | `StaffEventAssignment.allowed_categories` (M2M) | 0 |
+| 13 | `tixelise_sales_sale` | Application | `sales.Sale` | 2 |
+| 14 | `tixelise_sales_saleitem` | Application | `sales.SaleItem` | 3 |
+| 15 | `tixelise_sales_idempotencyrecord` | Application | `sales.IdempotencyRecord` | 2 |
+| 16 | `tixelise_ticketing_ticketsequence` | Application | `ticketing.TicketSequence` | 2 |
+| 17 | `tixelise_ticketing_ticket` | Application | `ticketing.Ticket` | 5 |
+| 18 | `tixelise_audit_auditlog` | Application | `audit.AuditLog` | 134 |
 | 19 | `auth_group` | Django framework | `auth.Group` | 0 |
 | 20 | `auth_group_permissions` | Django framework | `auth.Group.permissions` (M2M) | 0 |
 | 21 | `auth_permission` | Django framework | `auth.Permission` | 80 |
@@ -52,65 +57,65 @@
 ### Foreign-key map (exact links)
 
 ```
-tenancy_tenant_tixelise (id)
-├── tenancy_tenantmembership_tixelise.tenant_id
-├── events_event_tixelise.tenant_id
-├── catalog_ticketcategory_tixelise.tenant_id
-├── catalog_eventprice_tixelise.tenant_id
-├── catalog_tickettemplate_tixelise.tenant_id
-├── staff_staffprofile_tixelise.tenant_id
-├── assignments_staffeventassignment_tixelise.tenant_id
-├── sales_sale_tixelise.tenant_id
-├── sales_idempotencyrecord_tixelise.tenant_id
-├── ticketing_ticketsequence_tixelise.tenant_id
-├── ticketing_ticket_tixelise.tenant_id
-└── audit_auditlog_tixelise.tenant_id            (nullable)
+tixelise_tenancy_tenant (id)
+├── tixelise_tenancy_tenantmembership.tenant_id
+├── tixelise_events_event.tenant_id
+├── tixelise_catalog_ticketcategory.tenant_id
+├── tixelise_catalog_eventprice.tenant_id
+├── tixelise_catalog_tickettemplate.tenant_id
+├── tixelise_staff_staffprofile.tenant_id
+├── tixelise_assignments_staffeventassignment.tenant_id
+├── tixelise_sales_sale.tenant_id
+├── tixelise_sales_idempotencyrecord.tenant_id
+├── tixelise_ticketing_ticketsequence.tenant_id
+├── tixelise_ticketing_ticket.tenant_id
+└── tixelise_audit_auditlog.tenant_id            (nullable)
 
-accounts_user_tixelise (id)
-├── tenancy_tenantmembership_tixelise.user_id
-├── accounts_user_groups_tixelise.user_id
-├── accounts_user_user_permissions_tixelise.user_id
-├── events_event_tixelise.created_by_id          (nullable)
-├── staff_staffprofile_tixelise.user_id
-├── staff_staffprofile_tixelise.created_by_id    (nullable)
-├── assignments_staffeventassignment_tixelise.created_by_id (nullable)
-├── sales_sale_tixelise.created_by_id            (nullable)
-├── sales_idempotencyrecord_tixelise.actor_id
-├── audit_auditlog_tixelise.actor_id             (nullable)
+tixelise_accounts_user (id)
+├── tixelise_tenancy_tenantmembership.user_id
+├── tixelise_accounts_user_groups.user_id
+├── tixelise_accounts_user_user_permissions.user_id
+├── tixelise_events_event.created_by_id          (nullable)
+├── tixelise_staff_staffprofile.user_id
+├── tixelise_staff_staffprofile.created_by_id    (nullable)
+├── tixelise_assignments_staffeventassignment.created_by_id (nullable)
+├── tixelise_sales_sale.created_by_id            (nullable)
+├── tixelise_sales_idempotencyrecord.actor_id
+├── tixelise_audit_auditlog.actor_id             (nullable)
 └── django_admin_log.user_id
 
-events_event_tixelise (id)
-├── catalog_eventprice_tixelise.event_id
-├── assignments_staffeventassignment_tixelise.event_id
-├── sales_sale_tixelise.event_id
-├── ticketing_ticketsequence_tixelise.event_id
-└── ticketing_ticket_tixelise.event_id
+tixelise_events_event (id)
+├── tixelise_catalog_eventprice.event_id
+├── tixelise_assignments_staffeventassignment.event_id
+├── tixelise_sales_sale.event_id
+├── tixelise_ticketing_ticketsequence.event_id
+└── tixelise_ticketing_ticket.event_id
 
-catalog_ticketcategory_tixelise (id)
-├── catalog_eventprice_tixelise.category_id
-├── assignments_staffeventassignment_allowed_categories_tixelise.ticketcategory_id
-├── sales_saleitem_tixelise.category_id
-└── ticketing_ticket_tixelise.category_id
+tixelise_catalog_ticketcategory (id)
+├── tixelise_catalog_eventprice.category_id
+├── tixelise_assignments_staffeventassignment_allowed_categories.ticketcategory_id
+├── tixelise_sales_saleitem.category_id
+└── tixelise_ticketing_ticket.category_id
 
-staff_staffprofile_tixelise (id)
-├── assignments_staffeventassignment_tixelise.staff_id
-├── sales_sale_tixelise.staff_id
-└── ticketing_ticket_tixelise.staff_id
+tixelise_staff_staffprofile (id)
+├── tixelise_assignments_staffeventassignment.staff_id
+├── tixelise_sales_sale.staff_id
+└── tixelise_ticketing_ticket.staff_id
 
-sales_sale_tixelise (id)
-├── sales_saleitem_tixelise.sale_id
-├── sales_idempotencyrecord_tixelise.sale_id     (nullable)
-└── ticketing_ticket_tixelise.sale_id
+tixelise_sales_sale (id)
+├── tixelise_sales_saleitem.sale_id
+├── tixelise_sales_idempotencyrecord.sale_id     (nullable)
+└── tixelise_ticketing_ticket.sale_id
 
-assignments_staffeventassignment_tixelise (id)
-└── assignments_staffeventassignment_allowed_categories_tixelise.staffeventassignment_id
+tixelise_assignments_staffeventassignment (id)
+└── tixelise_assignments_staffeventassignment_allowed_categories.staffeventassignment_id
 
 auth_group (id)
-├── accounts_user_groups_tixelise.group_id
+├── tixelise_accounts_user_groups.group_id
 └── auth_group_permissions.group_id
 
 auth_permission (id)
-├── accounts_user_user_permissions_tixelise.permission_id
+├── tixelise_accounts_user_user_permissions.permission_id
 └── auth_group_permissions.permission_id
 
 django_content_type (id)
@@ -124,7 +129,7 @@ django_migrations / django_session — no foreign keys.
 
 ## 2. Application tables
 
-### 1. `tenancy_tenant_tixelise`
+### 1. `tixelise_tenancy_tenant`
 
 **Django model:** `tenancy.Tenant` — the tenant (organisation) root record.
 **Rows:** 4
@@ -137,12 +142,13 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `active` (Django) | values: `active`, `suspended`, `inactive`; indexed | `active` |
 | `timezone` | `varchar(64)` | NO | `UTC` (Django) | — | `Asia/Kolkata` |
 | `currency` | `varchar(8)` | NO | `INR` (Django) | — | `INR` |
+| `phone` | `varchar(32)` | NO | `""` (Django) | — | `+91 98765 43210` |
 | `settings` | `text` | NO | `{}` (Django) | JSON check: `JSON_VALID(settings) OR settings IS NULL` | `{}` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:07.951012` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:07.951030` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_tenancy_tenant_tixelise_1` — UNIQUE (`code`)
+- `sqlite_autoindex_tixelise_tenancy_tenant_1` — UNIQUE (`code`)
 - `tenancy_tenant_status_bb1f1bbe` — INDEX (`status`)
 
 **Relationships:** one tenant → many memberships, events, categories, prices, templates, staff profiles, assignments, sales, idempotency records, ticket sequences, tickets, audit logs (see FK map).
@@ -156,6 +162,7 @@ django_migrations / django_session — no foreign keys.
   "status": "active",
   "timezone": "Asia/Kolkata",
   "currency": "INR",
+  "phone": "+91 98765 43210",
   "settings": {},
   "created_at": "2026-10-20 08:00:07.951012",
   "updated_at": "2026-10-20 08:00:07.951030"
@@ -164,9 +171,9 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 2. `accounts_user_tixelise`
+### 2. `tixelise_accounts_user`
 
-**Django model:** `accounts.User` (custom `AbstractUser`) — global login identity, not tenant-owned.
+**Django model:** `accounts.User` (custom `AbstractUser`) — global login identity, not tenant-owned. A tenant deletion removes a row only when it is left with no membership and no staff profile.
 **Rows:** 11
 
 | Column | SQLite type | Null | Default | Key / constraint | Example (id=1) |
@@ -185,7 +192,7 @@ django_migrations / django_session — no foreign keys.
 | `is_platform_admin` | `bool` | NO | `0` (Django) | — | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_accounts_user_tixelise_1` — UNIQUE (`username`)
+- `sqlite_autoindex_tixelise_accounts_user_1` — UNIQUE (`username`)
 
 **Relationships:** one user → many memberships; many staff profiles; created events; created assignments; created sales; idempotency records; audit events; `django_admin_log` entries; M2M to groups and permissions.
 
@@ -209,10 +216,10 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 3. `tenancy_tenantmembership_tixelise`
+### 3. `tixelise_tenancy_tenantmembership`
 
 **Django model:** `tenancy.TenantMembership` — links a global user to a tenant with a role.
-**Rows:** 6
+**Rows:** 4
 
 | Column | SQLite type | Null | Default | Key / constraint | Example (id=1) |
 |---|---|---|---|---|---|
@@ -221,14 +228,16 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `active` (Django) | values: `active`, `inactive`; indexed | `active` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:08.619139` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:08.619167` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `CASCADE`) | `1` |
-| `user_id` | `bigint` | NO | — | FK → `accounts_user_tixelise.id` (Django `CASCADE`) | `2` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `CASCADE`) | `1` |
+| `user_id` | `bigint` | NO | — | FK → `tixelise_accounts_user.id` (Django `CASCADE`) | `2` |
+| `central_user_id` | `varchar(64)` | NO | `''` | Indexed. Primary key of this user in the central user master; `''` until registered | `"12"` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_tenancy_tenantmembership_tixelise_1` — UNIQUE (`tenant_id`, `user_id`) (`uniq_tenant_membership`)
-- `tenancy_tenantmembership_user_id_2af4f8f2` — INDEX (`user_id`)
-- `tenancy_tenantmembership_tenant_id_f6a85d5e` — INDEX (`tenant_id`)
-- `tenancy_tenantmembership_status_704ccc68` — INDEX (`status`)
+- `sqlite_autoindex_tixelise_tenancy_tenantmembership_1` — UNIQUE (`tenant_id`, `user_id`) (`uniq_tenant_membership`)
+- `tixelise_tenancy_tenantmembership_user_id_002c295a` — INDEX (`user_id`)
+- `tixelise_tenancy_tenantmembership_tenant_id_e088e682` — INDEX (`tenant_id`)
+- `tixelise_tenancy_tenantmembership_status_88434970` — INDEX (`status`)
+- `tixelise_tenancy_tenantmembership_central_user_id_86425d05` — INDEX (`central_user_id`)
 
 **Relationships:** many memberships → one tenant, one user.
 
@@ -241,13 +250,14 @@ django_migrations / django_session — no foreign keys.
   "created_at": "2026-10-20 08:00:08.619139",
   "updated_at": "2026-10-20 08:00:08.619167",
   "tenant_id": 1,
-  "user_id": 2
+  "user_id": 2,
+  "central_user_id": "12"
 }
 ```
 
 ---
 
-### 4. `accounts_user_groups_tixelise`
+### 4. `tixelise_accounts_user_groups`
 
 **Django model:** auto-created M2M table for `accounts.User.groups`.
 **Rows:** 0 (illustrative example below)
@@ -255,13 +265,13 @@ django_migrations / django_session — no foreign keys.
 | Column | SQLite type | Null | Default | Key / constraint | Example |
 |---|---|---|---|---|---|
 | `id` | `INTEGER` | NO | autoincrement | PRIMARY KEY | `1` |
-| `user_id` | `bigint` | NO | — | FK → `accounts_user_tixelise.id` (Django `CASCADE`) | `2` |
+| `user_id` | `bigint` | NO | — | FK → `tixelise_accounts_user.id` (Django `CASCADE`) | `2` |
 | `group_id` | `INTEGER` | NO | — | FK → `auth_group.id` (Django `CASCADE`) | `1` |
 
 **Indexes / constraints**
-- `accounts_user_groups_tixelise_user_id_group_id_9f41c3bc_uniq` — UNIQUE (`user_id`, `group_id`)
-- `accounts_user_groups_tixelise_group_id_23923b74` — INDEX (`group_id`)
-- `accounts_user_groups_tixelise_user_id_9f57b8ab` — INDEX (`user_id`)
+- `tixelise_accounts_user_groups_user_id_group_id_36d69fbc_uniq` — UNIQUE (`user_id`, `group_id`)
+- `tixelise_accounts_user_groups_group_id_a34f04e7` — INDEX (`group_id`)
+- `tixelise_accounts_user_groups_user_id_e6df1151` — INDEX (`user_id`)
 
 **Relationships:** many link rows → one user, one auth group.
 
@@ -272,7 +282,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 5. `accounts_user_user_permissions_tixelise`
+### 5. `tixelise_accounts_user_user_permissions`
 
 **Django model:** auto-created M2M table for `accounts.User.user_permissions`.
 **Rows:** 0 (illustrative example below)
@@ -280,13 +290,13 @@ django_migrations / django_session — no foreign keys.
 | Column | SQLite type | Null | Default | Key / constraint | Example |
 |---|---|---|---|---|---|
 | `id` | `INTEGER` | NO | autoincrement | PRIMARY KEY | `1` |
-| `user_id` | `bigint` | NO | — | FK → `accounts_user_tixelise.id` (Django `CASCADE`) | `2` |
+| `user_id` | `bigint` | NO | — | FK → `tixelise_accounts_user.id` (Django `CASCADE`) | `2` |
 | `permission_id` | `INTEGER` | NO | — | FK → `auth_permission.id` (Django `CASCADE`) | `1` |
 
 **Indexes / constraints**
-- `accounts_user_user_permissions_tixelise_user_id_permission_id_f670e037_uniq` — UNIQUE (`user_id`, `permission_id`)
-- `accounts_user_user_permissions_tixelise_permission_id_cd913a5f` — INDEX (`permission_id`)
-- `accounts_user_user_permissions_tixelise_user_id_3aee964b` — INDEX (`user_id`)
+- `tixelise_accounts_user_user_permissions_user_id_permission_id_52d51b24_uniq` — UNIQUE (`user_id`, `permission_id`)
+- `tixelise_accounts_user_user_permissions_permission_id_ced4dcf3` — INDEX (`permission_id`)
+- `tixelise_accounts_user_user_permissions_user_id_35e42cfa` — INDEX (`user_id`)
 
 **Relationships:** many link rows → one user, one permission.
 
@@ -297,7 +307,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 6. `events_event_tixelise`
+### 6. `tixelise_events_event`
 
 **Django model:** `events.Event` — an event owned by a tenant.
 **Rows:** 6
@@ -317,11 +327,11 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `draft` (Django) | values: `draft`, `active`, `completed`, `cancelled`; indexed | `active` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.788825` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.854075` |
-| `created_by_id` | `bigint` | YES | `NULL` | FK → `accounts_user_tixelise.id` (Django `SET_NULL`) | `2` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
+| `created_by_id` | `bigint` | YES | `NULL` | FK → `tixelise_accounts_user.id` (Django `SET_NULL`) | `2` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_events_event_tixelise_1` — UNIQUE (`tenant_id`, `code`) (`uniq_tenant_event_code`)
+- `sqlite_autoindex_tixelise_events_event_1` — UNIQUE (`tenant_id`, `code`) (`uniq_tenant_event_code`)
 - `events_event_tenant_id_388ba8e1` — INDEX (`tenant_id`)
 - `events_event_created_by_id_2c28ea90` — INDEX (`created_by_id`)
 - `events_event_status_a1b46b6a` — INDEX (`status`)
@@ -352,7 +362,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 7. `catalog_ticketcategory_tixelise`
+### 7. `tixelise_catalog_ticketcategory`
 
 **Django model:** `catalog.TicketCategory` — reusable tenant-level ticket category.
 **Rows:** 6
@@ -366,10 +376,10 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `active` (Django) | values: `active`, `inactive` | `active` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.750043` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.750065` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_catalog_ticketcategory_tixelise_1` — UNIQUE (`tenant_id`, `code`) (`uniq_tenant_category_code`)
+- `sqlite_autoindex_tixelise_catalog_ticketcategory_1` — UNIQUE (`tenant_id`, `code`) (`uniq_tenant_category_code`)
 - `catalog_ticketcategory_tenant_id_ad8db04c` — INDEX (`tenant_id`)
 
 **Relationships:** many categories → one tenant; one category → many prices, assignment category links, sale items, tickets.
@@ -390,7 +400,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 8. `catalog_eventprice_tixelise`
+### 8. `tixelise_catalog_eventprice`
 
 **Django model:** `catalog.EventPrice` — price of one category for one event (effective dates optional).
 **Rows:** 10
@@ -405,12 +415,12 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `active` (Django) | values: `active`, `inactive` | `active` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.803221` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.803265` |
-| `event_id` | `bigint` | NO | — | FK → `events_event_tixelise.id` (Django `CASCADE`) | `1` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
-| `category_id` | `bigint` | NO | — | FK → `catalog_ticketcategory_tixelise.id` (Django `PROTECT`) | `1` |
+| `event_id` | `bigint` | NO | — | FK → `tixelise_events_event.id` (Django `CASCADE`) | `1` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
+| `category_id` | `bigint` | NO | — | FK → `tixelise_catalog_ticketcategory.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_catalog_eventprice_tixelise_1` — UNIQUE (`tenant_id`, `event_id`, `category_id`) (`uniq_tenant_event_category_price`)
+- `sqlite_autoindex_tixelise_catalog_eventprice_1` — UNIQUE (`tenant_id`, `event_id`, `category_id`) (`uniq_tenant_event_category_price`)
 - `catalog_eventprice_category_id_2ed38dd9` — INDEX (`category_id`)
 - `catalog_eventprice_tenant_id_98e724af` — INDEX (`tenant_id`)
 - `catalog_eventprice_event_id_6ec88793` — INDEX (`event_id`)
@@ -437,7 +447,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 9. `catalog_tickettemplate_tixelise`
+### 9. `tixelise_catalog_tickettemplate`
 
 **Django model:** `catalog.TicketTemplate` — tenant ticket layout/configuration.
 **Rows:** 0 (illustrative example below)
@@ -451,7 +461,7 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `active` (Django) | values: `active`, `inactive` | `active` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:08:00` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:08:00` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
 - `catalog_tickettemplate_tenant_id_e371818b` — INDEX (`tenant_id`)
@@ -476,7 +486,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 10. `staff_staffprofile_tixelise`
+### 10. `tixelise_staff_staffprofile`
 
 **Django model:** `staff.StaffProfile` — a user's staff identity inside a tenant.
 **Rows:** 3
@@ -492,13 +502,13 @@ django_migrations / django_session — no foreign keys.
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.735195` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.735223` |
 | `last_login` | `datetime` | YES | `NULL` | — | `null` |
-| `created_by_id` | `bigint` | YES | `NULL` | FK → `accounts_user_tixelise.id` (Django `SET_NULL`) | `2` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
-| `user_id` | `bigint` | NO | — | FK → `accounts_user_tixelise.id` (Django `PROTECT`) | `3` |
+| `created_by_id` | `bigint` | YES | `NULL` | FK → `tixelise_accounts_user.id` (Django `SET_NULL`) | `2` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
+| `user_id` | `bigint` | NO | — | FK → `tixelise_accounts_user.id` (Django `PROTECT`) | `3` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_staff_staffprofile_tixelise_2` — UNIQUE (`tenant_id`, `user_id`) (`uniq_tenant_staff_user`)
-- `sqlite_autoindex_staff_staffprofile_tixelise_1` — UNIQUE (`tenant_id`, `staff_code`) (`uniq_tenant_staff_code`)
+- `sqlite_autoindex_tixelise_staff_staffprofile_2` — UNIQUE (`tenant_id`, `user_id`) (`uniq_tenant_staff_user`)
+- `sqlite_autoindex_tixelise_staff_staffprofile_1` — UNIQUE (`tenant_id`, `staff_code`) (`uniq_tenant_staff_code`)
 - `staff_staffprofile_user_id_de1feaad` — INDEX (`user_id`)
 - `staff_staffprofile_tenant_id_6609cafe` — INDEX (`tenant_id`)
 - `staff_staffprofile_created_by_id_d09ceda9` — INDEX (`created_by_id`)
@@ -525,7 +535,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 11. `assignments_staffeventassignment_tixelise`
+### 11. `tixelise_assignments_staffeventassignment`
 
 **Django model:** `assignments.StaffEventAssignment` — the POS security gate linking a staff profile to an event.
 **Rows:** 6
@@ -539,13 +549,13 @@ django_migrations / django_session — no foreign keys.
 | `restrict_categories` | `bool` | NO | `0` (Django) | — | `0` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.842409` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:00:39.842426` |
-| `created_by_id` | `bigint` | YES | `NULL` | FK → `accounts_user_tixelise.id` (Django `SET_NULL`) | `2` |
-| `event_id` | `bigint` | NO | — | FK → `events_event_tixelise.id` (Django `CASCADE`) | `1` |
-| `staff_id` | `bigint` | NO | — | FK → `staff_staffprofile_tixelise.id` (Django `CASCADE`) | `1` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
+| `created_by_id` | `bigint` | YES | `NULL` | FK → `tixelise_accounts_user.id` (Django `SET_NULL`) | `2` |
+| `event_id` | `bigint` | NO | — | FK → `tixelise_events_event.id` (Django `CASCADE`) | `1` |
+| `staff_id` | `bigint` | NO | — | FK → `tixelise_staff_staffprofile.id` (Django `CASCADE`) | `1` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_assignments_staffeventassignment_tixelise_1` — UNIQUE (`tenant_id`, `staff_id`, `event_id`) (`uniq_tenant_staff_event`)
+- `sqlite_autoindex_tixelise_assignments_staffeventassignment_1` — UNIQUE (`tenant_id`, `staff_id`, `event_id`) (`uniq_tenant_staff_event`)
 - `assignments_staffeventassignment_tenant_id_4fe9ce8b` — INDEX (`tenant_id`)
 - `assignments_staffeventassignment_staff_id_ce5bace9` — INDEX (`staff_id`)
 - `assignments_staffeventassignment_event_id_4145ad0c` — INDEX (`event_id`)
@@ -573,7 +583,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 12. `assignments_staffeventassignment_allowed_categories_tixelise`
+### 12. `tixelise_assignments_staffeventassignment_allowed_categories`
 
 **Django model:** auto-created M2M table for `StaffEventAssignment.allowed_categories`.
 **Rows:** 0 (illustrative example below)
@@ -581,13 +591,13 @@ django_migrations / django_session — no foreign keys.
 | Column | SQLite type | Null | Default | Key / constraint | Example |
 |---|---|---|---|---|---|
 | `id` | `INTEGER` | NO | autoincrement | PRIMARY KEY | `1` |
-| `staffeventassignment_id` | `bigint` | NO | — | FK → `assignments_staffeventassignment_tixelise.id` (Django `CASCADE`) | `1` |
-| `ticketcategory_id` | `bigint` | NO | — | FK → `catalog_ticketcategory_tixelise.id` (Django `CASCADE`) | `1` |
+| `staffeventassignment_id` | `bigint` | NO | — | FK → `tixelise_assignments_staffeventassignment.id` (Django `CASCADE`) | `1` |
+| `ticketcategory_id` | `bigint` | NO | — | FK → `tixelise_catalog_ticketcategory.id` (Django `CASCADE`) | `1` |
 
 **Indexes / constraints**
-- `assignments_staffeventassignment_allowed_categories_tixelise_staffeventassignment_id_ticketcategory_id_d0ec741c_uniq` — UNIQUE (`staffeventassignment_id`, `ticketcategory_id`)
-- `assignments_staffeventassignment_allowed_categories_tixelise_ticketcategory_id_a49e7c1f` — INDEX (`ticketcategory_id`)
-- `assignments_staffeventassignment_allowed_categories_tixelise_staffeventassignment_id_7d0f68a8` — INDEX (`staffeventassignment_id`)
+- `tixelise_assignments_staffeventassignment_allowed_categories_staffeventassignment_id_ticketcategory_id_451963b6_uniq` — UNIQUE (`staffeventassignment_id`, `ticketcategory_id`)
+- `tixelise_assignments_staffeventassignment_allowed_categories_ticketcategory_id_b1c07525` — INDEX (`ticketcategory_id`)
+- `tixelise_assignments_staffeventassignment_allowed_categories_staffeventassignment_id_0fec310d` — INDEX (`staffeventassignment_id`)
 
 **Relationships:** many link rows → one assignment, one ticket category.
 
@@ -598,7 +608,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 13. `sales_sale_tixelise`
+### 13. `tixelise_sales_sale`
 
 **Django model:** `sales.Sale` — one completed POS transaction.
 **Rows:** 2
@@ -613,13 +623,13 @@ django_migrations / django_session — no foreign keys.
 | `currency` | `varchar(8)` | NO | `INR` (Django) | — | `INR` |
 | `created_at` | `datetime` | NO | auto now (Django) | indexed | `2026-10-20 08:01:28.586448` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:01:28.586459` |
-| `created_by_id` | `bigint` | YES | `NULL` | FK → `accounts_user_tixelise.id` (Django `SET_NULL`) | `3` |
-| `event_id` | `bigint` | NO | — | FK → `events_event_tixelise.id` (Django `PROTECT`) | `1` |
-| `staff_id` | `bigint` | NO | — | FK → `staff_staffprofile_tixelise.id` (Django `PROTECT`) | `1` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
+| `created_by_id` | `bigint` | YES | `NULL` | FK → `tixelise_accounts_user.id` (Django `SET_NULL`) | `3` |
+| `event_id` | `bigint` | NO | — | FK → `tixelise_events_event.id` (Django `PROTECT`) | `1` |
+| `staff_id` | `bigint` | NO | — | FK → `tixelise_staff_staffprofile.id` (Django `PROTECT`) | `1` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_sales_sale_tixelise_1` — UNIQUE (`tenant_id`, `sale_reference`) (`uniq_tenant_sale_reference`)
+- `sqlite_autoindex_tixelise_sales_sale_1` — UNIQUE (`tenant_id`, `sale_reference`) (`uniq_tenant_sale_reference`)
 - `sales_sale_tenant_id_c7dcc438` — INDEX (`tenant_id`)
 - `sales_sale_staff_id_507ba9d1` — INDEX (`staff_id`)
 - `sales_sale_event_id_ca8c5974` — INDEX (`event_id`)
@@ -649,7 +659,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 14. `sales_saleitem_tixelise`
+### 14. `tixelise_sales_saleitem`
 
 **Django model:** `sales.SaleItem` — one line inside a sale, with a price snapshot.
 **Rows:** 3
@@ -660,8 +670,8 @@ django_migrations / django_session — no foreign keys.
 | `quantity` | `integer unsigned` | NO | — | CHECK `quantity >= 0` | `2` |
 | `unit_price_snapshot` | `decimal` | NO | — | price at sale time | `499` |
 | `line_total` | `decimal` | NO | — | `unit_price_snapshot × quantity` | `998` |
-| `category_id` | `bigint` | NO | — | FK → `catalog_ticketcategory_tixelise.id` (Django `PROTECT`) | `1` |
-| `sale_id` | `bigint` | NO | — | FK → `sales_sale_tixelise.id` (Django `CASCADE`) | `1` |
+| `category_id` | `bigint` | NO | — | FK → `tixelise_catalog_ticketcategory.id` (Django `PROTECT`) | `1` |
+| `sale_id` | `bigint` | NO | — | FK → `tixelise_sales_sale.id` (Django `CASCADE`) | `1` |
 
 **Indexes / constraints**
 - `sales_saleitem_sale_id_56e67045` — INDEX (`sale_id`)
@@ -684,7 +694,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 15. `sales_idempotencyrecord_tixelise`
+### 15. `tixelise_sales_idempotencyrecord`
 
 **Django model:** `sales.IdempotencyRecord` — deduplicates retried sale requests.
 **Rows:** 2
@@ -697,13 +707,13 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `completed` (Django) | values: `completed` | `completed` |
 | `created_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:01:28.589209` |
 | `expires_at` | `datetime` | NO | — | — | `2026-10-27 08:01:28.581962` |
-| `actor_id` | `bigint` | NO | — | FK → `accounts_user_tixelise.id` (Django `CASCADE`) | `3` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
-| `sale_id` | `bigint` | YES | `NULL` | FK → `sales_sale_tixelise.id` (Django `SET_NULL`) | `1` |
+| `actor_id` | `bigint` | NO | — | FK → `tixelise_accounts_user.id` (Django `CASCADE`) | `3` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
+| `sale_id` | `bigint` | YES | `NULL` | FK → `tixelise_sales_sale.id` (Django `SET_NULL`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_sales_idempotencyrecord_tixelise_1` — UNIQUE (`tenant_id`, `actor_id`, `idempotency_key`) (`uniq_tenant_actor_idempotency_key`)
-- `sales_idemp_tenant__1dab53_idx` — INDEX (`tenant_id`, `actor_id`, `idempotency_key`)
+- `sqlite_autoindex_tixelise_sales_idempotencyrecord_1` — UNIQUE (`tenant_id`, `actor_id`, `idempotency_key`) (`uniq_tenant_actor_idempotency_key`)
+- `tixelise_sa_tenant__3e03bf_idx` — INDEX (`tenant_id`, `actor_id`, `idempotency_key`)
 - `sales_idempotencyrecord_sale_id_8687d39b` — INDEX (`sale_id`)
 - `sales_idempotencyrecord_tenant_id_51c5f0f7` — INDEX (`tenant_id`)
 - `sales_idempotencyrecord_actor_id_3e682653` — INDEX (`actor_id`)
@@ -727,7 +737,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 16. `ticketing_ticketsequence_tixelise`
+### 16. `tixelise_ticketing_ticketsequence`
 
 **Django model:** `ticketing.TicketSequence` — atomic per-`(tenant, event)` ticket counter.
 **Rows:** 2
@@ -737,11 +747,11 @@ django_migrations / django_session — no foreign keys.
 | `id` | `INTEGER` | NO | autoincrement | PRIMARY KEY | `1` |
 | `last_number` | `bigint` | NO | `0` (Django) | last allocated sequence number | `2` |
 | `updated_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:01:28.585821` |
-| `event_id` | `bigint` | NO | — | FK → `events_event_tixelise.id` (Django `PROTECT`) | `1` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
+| `event_id` | `bigint` | NO | — | FK → `tixelise_events_event.id` (Django `PROTECT`) | `1` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_ticketing_ticketsequence_tixelise_1` — UNIQUE (`tenant_id`, `event_id`) (`uniq_tenant_event_sequence`)
+- `sqlite_autoindex_tixelise_ticketing_ticketsequence_1` — UNIQUE (`tenant_id`, `event_id`) (`uniq_tenant_event_sequence`)
 - `ticketing_ticketsequence_tenant_id_30d26159` — INDEX (`tenant_id`)
 - `ticketing_ticketsequence_event_id_326b4fb5` — INDEX (`event_id`)
 
@@ -760,7 +770,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 17. `ticketing_ticket_tixelise`
+### 17. `tixelise_ticketing_ticket`
 
 **Django model:** `ticketing.Ticket` — an issued ticket with a globally unique printable code.
 **Rows:** 5
@@ -773,16 +783,16 @@ django_migrations / django_session — no foreign keys.
 | `status` | `varchar(16)` | NO | `issued` (Django) | values: `issued`, `voided`, `refunded` | `issued` |
 | `issued_at` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:01:28.588120` |
 | `reprint_count` | `integer unsigned` | NO | `0` (Django) | CHECK `reprint_count >= 0` | `0` |
-| `category_id` | `bigint` | NO | — | FK → `catalog_ticketcategory_tixelise.id` (Django `PROTECT`) | `1` |
-| `event_id` | `bigint` | NO | — | FK → `events_event_tixelise.id` (Django `PROTECT`) | `1` |
-| `sale_id` | `bigint` | NO | — | FK → `sales_sale_tixelise.id` (Django `PROTECT`) | `1` |
-| `staff_id` | `bigint` | NO | — | FK → `staff_staffprofile_tixelise.id` (Django `PROTECT`) | `1` |
-| `tenant_id` | `bigint` | NO | — | FK → `tenancy_tenant_tixelise.id` (Django `PROTECT`) | `1` |
+| `category_id` | `bigint` | NO | — | FK → `tixelise_catalog_ticketcategory.id` (Django `PROTECT`) | `1` |
+| `event_id` | `bigint` | NO | — | FK → `tixelise_events_event.id` (Django `PROTECT`) | `1` |
+| `sale_id` | `bigint` | NO | — | FK → `tixelise_sales_sale.id` (Django `PROTECT`) | `1` |
+| `staff_id` | `bigint` | NO | — | FK → `tixelise_staff_staffprofile.id` (Django `PROTECT`) | `1` |
+| `tenant_id` | `bigint` | NO | — | FK → `tixelise_tenancy_tenant.id` (Django `PROTECT`) | `1` |
 
 **Indexes / constraints**
-- `sqlite_autoindex_ticketing_ticket_tixelise_3` — UNIQUE (`tenant_id`, `event_id`, `sequence_number`) (`uniq_tenant_event_sequence_number`)
-- `sqlite_autoindex_ticketing_ticket_tixelise_2` — UNIQUE (`ticket_code`)
-- `sqlite_autoindex_ticketing_ticket_tixelise_1` — UNIQUE (`id`) (primary key)
+- `sqlite_autoindex_tixelise_ticketing_ticket_3` — UNIQUE (`tenant_id`, `event_id`, `sequence_number`) (`uniq_tenant_event_sequence_number`)
+- `sqlite_autoindex_tixelise_ticketing_ticket_2` — UNIQUE (`ticket_code`)
+- `sqlite_autoindex_tixelise_ticketing_ticket_1` — UNIQUE (`id`) (primary key)
 - `ticketing_ticket_tenant_id_2e18404d` — INDEX (`tenant_id`)
 - `ticketing_ticket_staff_id_d8681ca8` — INDEX (`staff_id`)
 - `ticketing_ticket_sale_id_09a627e2` — INDEX (`sale_id`)
@@ -811,7 +821,7 @@ django_migrations / django_session — no foreign keys.
 
 ---
 
-### 18. `audit_auditlog_tixelise`
+### 18. `tixelise_audit_auditlog`
 
 **Django model:** `audit.AuditLog` — append-only audit trail (passwords/tokens never recorded).
 **Rows:** 134
@@ -826,8 +836,8 @@ django_migrations / django_session — no foreign keys.
 | `correlation_id` | `varchar(64)` | NO | `""` (Django) | indexed | `c4017ce7-754e-41b7-ba2e-01a0aea65365` |
 | `metadata` | `text` | NO | `{}` (Django) | JSON check: `JSON_VALID(metadata) OR metadata IS NULL` | `{"sale_reference": "DREAMS001-S-6800898B", ...}` |
 | `created_at` | `datetime` | NO | auto now (Django) | indexed | `2026-10-20 08:01:28.589730` |
-| `actor_id` | `bigint` | YES | `NULL` | FK → `accounts_user_tixelise.id` (Django `SET_NULL`) | `3` |
-| `tenant_id` | `bigint` | YES | `NULL` | FK → `tenancy_tenant_tixelise.id` (Django `SET_NULL`) | `1` |
+| `actor_id` | `bigint` | YES | `NULL` | FK → `tixelise_accounts_user.id` (Django `SET_NULL`) | `3` |
+| `tenant_id` | `bigint` | YES | `NULL` | FK → `tixelise_tenancy_tenant.id` (Django `SET_NULL`) | `1` |
 
 **Indexes / constraints**
 - `audit_auditlog_tenant_id_6a956a1c` — INDEX (`tenant_id`)
@@ -880,7 +890,7 @@ These 7 tables are created and maintained by Django. They keep standard names (n
 **Indexes / constraints**
 - `sqlite_autoindex_auth_group_1` — UNIQUE (`name`)
 
-**Relationships:** many groups ↔ many users through `accounts_user_groups_tixelise`; many groups ↔ many permissions through `auth_group_permissions`.
+**Relationships:** many groups ↔ many users through `tixelise_accounts_user_groups`; many groups ↔ many permissions through `auth_group_permissions`.
 
 **Example row (illustrative)**
 ```json
@@ -930,7 +940,7 @@ These 7 tables are created and maintained by Django. They keep standard names (n
 - `auth_permission_content_type_id_codename_01ab375a_uniq` — UNIQUE (`content_type_id`, `codename`)
 - `auth_permission_content_type_id_2f476e4b` — INDEX (`content_type_id`)
 
-**Relationships:** many permissions → one content type; many permissions ↔ many groups through `auth_group_permissions`; many permissions ↔ many users through `accounts_user_user_permissions_tixelise`.
+**Relationships:** many permissions → one content type; many permissions ↔ many groups through `auth_group_permissions`; many permissions ↔ many users through `tixelise_accounts_user_user_permissions`.
 
 **Example row**
 ```json
@@ -957,7 +967,7 @@ These 7 tables are created and maintained by Django. They keep standard names (n
 | `action_flag` | `smallint unsigned` | NO | — | CHECK `action_flag >= 0` | `1` |
 | `change_message` | `text` | NO | — | — | `[{"changed": {"fields": ["name"]}}]` |
 | `content_type_id` | `INTEGER` | YES | `NULL` | FK → `django_content_type.id` (Django `SET_NULL`) | `1` |
-| `user_id` | `bigint` | NO | — | FK → `accounts_user_tixelise.id` (Django `CASCADE`) | `1` |
+| `user_id` | `bigint` | NO | — | FK → `tixelise_accounts_user.id` (Django `CASCADE`) | `1` |
 | `action_time` | `datetime` | NO | auto now (Django) | — | `2026-10-20 08:30:00` |
 
 **Indexes / constraints**
@@ -1067,19 +1077,19 @@ These 7 tables are created and maintained by Django. They keep standard names (n
 
 | Rule | Tables involved |
 |---|---|
-| Tenancy root | `tenancy_tenant_tixelise` |
-| User ↔ tenant role | `tenancy_tenantmembership_tixelise` (`UNIQUE tenant_id, user_id`) |
-| Event code unique per tenant | `events_event_tixelise` (`UNIQUE tenant_id, code`) |
-| Category code unique per tenant | `catalog_ticketcategory_tixelise` (`UNIQUE tenant_id, code`) |
-| Price unique per event+category | `catalog_eventprice_tixelise` (`UNIQUE tenant_id, event_id, category_id`) |
-| Staff code unique per tenant | `staff_staffprofile_tixelise` (`UNIQUE tenant_id, staff_code`) |
-| One staff profile per user per tenant | `staff_staffprofile_tixelise` (`UNIQUE tenant_id, user_id`) |
-| One assignment per staff+event | `assignments_staffeventassignment_tixelise` (`UNIQUE tenant_id, staff_id, event_id`) |
-| Sale reference unique per tenant | `sales_sale_tixelise` (`UNIQUE tenant_id, sale_reference`) |
-| Idempotency key unique per tenant+actor | `sales_idempotencyrecord_tixelise` (`UNIQUE tenant_id, actor_id, idempotency_key`) |
-| One ticket counter per tenant+event | `ticketing_ticketsequence_tixelise` (`UNIQUE tenant_id, event_id`) |
-| Ticket sequence unique per tenant+event | `ticketing_ticket_tixelise` (`UNIQUE tenant_id, event_id, sequence_number`) |
-| Ticket code globally unique | `ticketing_ticket_tixelise` (`UNIQUE ticket_code`) |
-| Non-negative money/quantity/count | `catalog_eventprice_tixelise`, `sales_saleitem_tixelise`, `ticketing_ticket_tixelise` |
-| Valid JSON storage | `tenancy_tenant_tixelise.settings`, `catalog_tickettemplate_tixelise.config`, `audit_auditlog_tixelise.metadata` |
-| Event time sanity | `events_event_tixelise` (`end_at > start_at`) |
+| Tenancy root | `tixelise_tenancy_tenant` |
+| User ↔ tenant role | `tixelise_tenancy_tenantmembership` (`UNIQUE tenant_id, user_id`) |
+| Event code unique per tenant | `tixelise_events_event` (`UNIQUE tenant_id, code`) |
+| Category code unique per tenant | `tixelise_catalog_ticketcategory` (`UNIQUE tenant_id, code`) |
+| Price unique per event+category | `tixelise_catalog_eventprice` (`UNIQUE tenant_id, event_id, category_id`) |
+| Staff code unique per tenant | `tixelise_staff_staffprofile` (`UNIQUE tenant_id, staff_code`) |
+| One staff profile per user per tenant | `tixelise_staff_staffprofile` (`UNIQUE tenant_id, user_id`) |
+| One assignment per staff+event | `tixelise_assignments_staffeventassignment` (`UNIQUE tenant_id, staff_id, event_id`) |
+| Sale reference unique per tenant | `tixelise_sales_sale` (`UNIQUE tenant_id, sale_reference`) |
+| Idempotency key unique per tenant+actor | `tixelise_sales_idempotencyrecord` (`UNIQUE tenant_id, actor_id, idempotency_key`) |
+| One ticket counter per tenant+event | `tixelise_ticketing_ticketsequence` (`UNIQUE tenant_id, event_id`) |
+| Ticket sequence unique per tenant+event | `tixelise_ticketing_ticket` (`UNIQUE tenant_id, event_id, sequence_number`) |
+| Ticket code globally unique | `tixelise_ticketing_ticket` (`UNIQUE ticket_code`) |
+| Non-negative money/quantity/count | `tixelise_catalog_eventprice`, `tixelise_sales_saleitem`, `tixelise_ticketing_ticket` |
+| Valid JSON storage | `tixelise_tenancy_tenant.settings`, `tixelise_catalog_tickettemplate.config`, `tixelise_audit_auditlog.metadata` |
+| Event time sanity | `tixelise_events_event` (`end_at > start_at`) |

@@ -216,13 +216,19 @@ class PlatformTenantLifecycleTests(APITestBase):
                 "name": "Tenant C",
                 "timezone": "Asia/Kolkata",
                 "currency": "INR",
+                "phone": "+91 98765 43210",
                 "admin_username": "c_admin",
                 "admin_password": "CadminPass123!",
+                "admin_email": "c_admin@example.com",
             },
             format="json",
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], "active")
+        self.assertEqual(response.data["phone"], "+91 98765 43210")
+        # Central syncs are disabled for tests, so both report as skipped.
+        self.assertEqual(response.data["currency_registration"]["status"], "skipped")
+        self.assertEqual(response.data["central_user_registration"]["status"], "skipped")
 
     def test_created_tenant_admin_can_login_immediately(self):
         self.login_platform()
@@ -231,8 +237,10 @@ class PlatformTenantLifecycleTests(APITestBase):
             {
                 "code": "DDDD",
                 "name": "Tenant D",
+                "phone": "+91 90000 00001",
                 "admin_username": "d_admin",
                 "admin_password": "DadminPass123!",
+                "admin_email": "d_admin@example.com",
             },
             format="json",
         )

@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -12,6 +13,11 @@ from apps.staff.models import StaffProfile
 from apps.tenancy.models import Tenant, TenantMembership
 
 
+# Tests must never write to the central master services.
+@override_settings(
+    CENTRAL_CURRENCY_SYNC_ENABLED=False,
+    CENTRAL_USER_SYNC_ENABLED=False,
+)
 class APITestBase(APITestCase):
     """Builds a complete tenant world (A + B) for isolation and flow tests."""
 

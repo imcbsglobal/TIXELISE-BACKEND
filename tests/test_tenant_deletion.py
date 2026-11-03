@@ -95,12 +95,18 @@ class TenantDeletionTests(APITestBase):
             TenantMembership.objects.filter(tenant_id=self.tenant_b.id).exists()
         )
 
-        self.assertTrue(User.objects.filter(pk=admin_id).exists())
-        self.assertTrue(User.objects.filter(pk=staff_user_id).exists())
+        # An identity is not tenant data: both of these were left with no
+        # membership anywhere, so they go with the tenant and their usernames
+        # are free again.
+        self.assertFalse(User.objects.filter(pk=admin_id).exists())
+        self.assertFalse(User.objects.filter(pk=staff_user_id).exists())
 
         preserved = AuditLog.objects.filter(id__in=tenant_audit_ids)
         self.assertEqual(preserved.count(), len(tenant_audit_ids))
         self.assertFalse(preserved.exclude(tenant__isnull=True).exists())
+        # The actor link is severed, but the username survives in actor_label.
+        self.assertFalse(preserved.exclude(actor__isnull=True).exists())
+        self.assertTrue(preserved.exclude(actor_label="").exists())
 
         self.assertTrue(
             AuditLog.objects.filter(
@@ -115,3 +121,30 @@ class TenantDeletionTests(APITestBase):
 
         self.assertEqual(response.status_code, 403, response.content)
         self.assertTrue(Tenant.objects.filter(pk=self.tenant_a.id).exists())
+
+    def test_identity_shared_with_another_tenant_survives(self):
+        TenantMembership.objects.create(
+            tenant=self.tenant_b, user=self.staff_a_user, role="pos_staff"
+        )
+        self.login_platform()
+
+        response = self.client.delete(self.delete_url(self.tenant_a))
+
+        self.assertEqual(response.status_code, 204, response.content)
+        self.assertTrue(User.objects.filter(pk=self.staff_a_user.id).exists())
+        self.assertTrue(
+            TenantMembership.objects.filter(
+                tenant=self.tenant_b, user=self.staff_a_user
+            ).exists()
+        )
+
+    def test_platform_admin_membership_survives(self):
+        TenantMembership.objects.create(
+            tenant=self.tenant_a, user=self.platform_user, role="tenant_admin"
+        )
+        self.login_platform()
+
+        response = self.client.delete(self.delete_url(self.tenant_a))
+
+        self.assertEqual(response.status_code, 204, response.content)
+        self.assertTrue(User.objects.filter(pk=self.platform_user.id).exists())

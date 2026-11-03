@@ -6,7 +6,7 @@ idempotency, audit trail, and daily reporting.
 
 Implements the backend & admin scope from `../tixelise_multitenant_backend_admin_overview.md`
 (phases 1–3, plus dashboard/reports/audit). SQLite by default; PostgreSQL-ready.
-Application-owned database tables use the `_tixelise` suffix. Django framework
+Application-owned database tables use the `tixelise_` prefix. Django framework
 tables keep their standard names; run the migrations below to rename existing
 application tables without recreating them.
 

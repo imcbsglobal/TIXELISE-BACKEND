@@ -15,12 +15,13 @@ class Tenant(models.Model):
     )
     timezone = models.CharField(max_length=64, default="UTC")
     currency = models.CharField(max_length=8, default="INR")
+    phone = models.CharField(max_length=32, blank=True, default="")
     settings = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "tenancy_tenant_tixelise"
+        db_table = "tixelise_tenancy_tenant"
         verbose_name = "tenant"
         verbose_name_plural = "tenants"
 
@@ -47,11 +48,14 @@ class TenantMembership(models.Model):
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True
     )
+    # Primary key of this user in the central user master. Empty until the
+    # account is registered there; required to delete it when the tenant goes.
+    central_user_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "tenancy_tenantmembership_tixelise"
+        db_table = "tixelise_tenancy_tenantmembership"
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "user"], name="uniq_tenant_membership"

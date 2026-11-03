@@ -9,6 +9,8 @@ User = get_user_model()
 
 
 class TenantSerializer(serializers.ModelSerializer):
+    admin_central_user_id = serializers.SerializerMethodField()
+
     class Meta:
         model = Tenant
         fields = [
@@ -18,11 +20,24 @@ class TenantSerializer(serializers.ModelSerializer):
             "status",
             "timezone",
             "currency",
+            "phone",
             "settings",
+            "admin_central_user_id",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["id", "status", "created_at", "updated_at"]
+
+    def get_admin_central_user_id(self, obj):
+        # Iterate the prefetched relation so the tenant list stays at a fixed
+        # number of queries instead of one lookup per row.
+        for membership in obj.memberships.all():
+            if (
+                membership.role == TenantMembership.Role.TENANT_ADMIN
+                and membership.central_user_id
+            ):
+                return membership.central_user_id
+        return ""
 
 
 class TenantCreateSerializer(serializers.ModelSerializer):
@@ -33,9 +48,14 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
     admin_username = serializers.CharField(max_length=150, write_only=True)
     admin_password = serializers.CharField(write_only=True)
-    admin_email = serializers.EmailField(
-        required=False, allow_blank=True, default="", write_only=True
+    admin_email = serializers.EmailField(write_only=True)
+    admin_first_name = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, default="", write_only=True
     )
+    admin_last_name = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, default="", write_only=True
+    )
+    phone = serializers.CharField(max_length=32)
 
     class Meta:
         model = Tenant
@@ -44,10 +64,13 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "name",
             "timezone",
             "currency",
+            "phone",
             "settings",
             "admin_username",
             "admin_password",
             "admin_email",
+            "admin_first_name",
+            "admin_last_name",
         ]
 
     def validate_admin_username(self, value):
@@ -67,6 +90,8 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         admin_username = validated_data.pop("admin_username")
         admin_password = validated_data.pop("admin_password")
         admin_email = validated_data.pop("admin_email", "")
+        admin_first_name = validated_data.pop("admin_first_name", "")
+        admin_last_name = validated_data.pop("admin_last_name", "")
 
         with transaction.atomic():
             tenant = Tenant.objects.create(status=Tenant.Status.ACTIVE, **validated_data)
@@ -74,6 +99,8 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 username=admin_username,
                 password=admin_password,
                 email=admin_email,
+                first_name=admin_first_name,
+                last_name=admin_last_name,
             )
             TenantMembership.objects.create(
                 tenant=tenant,

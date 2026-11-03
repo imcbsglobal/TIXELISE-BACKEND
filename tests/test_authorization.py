@@ -45,12 +45,15 @@ class AuthorizationTests(APITestBase):
         self.assertEqual(response.status_code, 403)
 
     def test_pos_staff_cannot_sell_unassigned_event(self):
+        # A single `now`: two consecutive timezone.now() calls can land on the
+        # same clock tick on Windows and violate `end_at > start_at`.
+        now = timezone.now()
         event = Event.objects.create(
             tenant=self.tenant_a,
             code="EV099",
             name="Unassigned",
-            start_at=timezone.now(),
-            end_at=timezone.now(),
+            start_at=now,
+            end_at=now + timedelta(hours=2),
             status=Event.Status.ACTIVE,
         )
         self.login_staff_a()
