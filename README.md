@@ -85,9 +85,9 @@ real `SELECT ... FOR UPDATE` row locking on the ticket sequence.
 | Templates | `GET|POST /admin/ticket-templates/` · `GET|PATCH /admin/ticket-templates/{id}/` |
 | Staff | `GET|POST /admin/staff/` · `GET|PATCH /admin/staff/{id}/` · `POST /admin/staff/{id}/deactivate|reset-password/` |
 | Assignments | `GET|POST /admin/assignments/` · `POST /admin/assignments/{id}/revoke/` |
-| Sales | `GET /admin/sales/` · `GET /admin/sales/{id}/` |
+| Sales | `GET /admin/sales/?event=&staff=&date_from=&date_to=` · `GET /admin/sales/{id}/` |
 | Tickets | `GET /admin/tickets/` · `GET /admin/tickets/{id}/` · `POST /admin/tickets/{id}/reprint/` |
-| Reports | `GET /admin/reports/daily/?date=YYYY-MM-DD` |
+| Reports | `GET /admin/reports/daily/?date=YYYY-MM-DD` · `GET /admin/reports/staff/?date_from=&date_to=` |
 | Audit | `GET /admin/audit-logs/?action=&actor=` |
 
 ### POS (`pos_staff` only)

@@ -1,3 +1,7 @@
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
@@ -5,9 +9,35 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.services import sync_platform_superuser_from_external_api
+from apps.core.exceptions import TixeliseAPIException
 from apps.tenancy.models import Tenant, TenantMembership
 
 User = get_user_model()
+
+
+def _check_license_expired(tenant_code):
+    try:
+        req = Request(
+            "https://activate.imcbs.com/mobileapp/api/project/tixelise/",
+            headers={"User-Agent": "Tixelise-Platform"},
+        )
+        with urlopen(req, timeout=5) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (URLError, HTTPError, TimeoutError, ValueError, OSError):
+        return False
+
+    customers = payload.get("customers") or []
+    code = (tenant_code or "").strip().upper()
+    for customer in customers:
+        client_id = (customer.get("client_id") or "").strip().upper()
+        if client_id == code:
+            validity = customer.get("license_validity") or {}
+            if validity.get("is_expired") is True:
+                return True
+            if (customer.get("status") or "").strip().lower() != "active":
+                return True
+            break
+    return False
 
 
 def build_tokens(user, tenant, role):
@@ -60,6 +90,12 @@ class LoginSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"tenant_code": "Unknown tenant code."},
                     code="tenant_not_found",
+                )
+            if _check_license_expired(tenant.code):
+                raise TixeliseAPIException(
+                    detail="License expired.",
+                    code="LICENSE_EXPIRED",
+                    status_code=403,
                 )
             if tenant.status != Tenant.Status.ACTIVE:
                 if tenant.status == Tenant.Status.SUSPENDED:

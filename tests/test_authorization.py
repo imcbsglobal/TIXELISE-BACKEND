@@ -17,6 +17,7 @@ class AuthorizationTests(APITestBase):
             "/api/v1/admin/assignments/",
             "/api/v1/admin/sales/",
             "/api/v1/admin/reports/daily/",
+            "/api/v1/admin/reports/staff/",
             "/api/v1/admin/audit-logs/",
             "/api/v1/admin/dashboard/",
         ]:

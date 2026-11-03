@@ -823,8 +823,12 @@ POST /api/v1/admin/assignments/1/revoke/
 #### List sales
 
 ```
-GET /api/v1/admin/sales/?event=1&staff=1&status=completed&sale_reference=DREAMS001-S-6800898B
+GET /api/v1/admin/sales/?event=1&staff=1&status=completed&sale_reference=DREAMS001-S-6800898B&date_from=2026-10-01&date_to=2026-10-31
 ```
+
+(`date_from` / `date_to` optional, `YYYY-MM-DD`, inclusive, resolved in the tenant's timezone.)
+
+**Error `400`:** `{"error": {"code": "VALIDATION_ERROR", "message": "date_from: must be YYYY-MM-DD."}}`
 
 **Response `200 OK`** (paginated):
 
@@ -1000,6 +1004,81 @@ GET /api/v1/admin/reports/daily/?date=2026-10-20
 **Error `400`:** `{"error": {"code": "VALIDATION_ERROR", "message": "date must be YYYY-MM-DD."}}`
 
 **Financial definitions:** `gross` = completed sales before refunds · `net` = gross − recorded refunds · ticket counts ≠ transaction counts.
+
+#### Staff report
+
+```
+GET /api/v1/admin/reports/staff/?date_from=2026-10-01&date_to=2026-10-31&event=1
+```
+
+(`date_from` / `date_to` optional, `YYYY-MM-DD`, inclusive, default *today in tenant timezone*; `event` optional.)
+
+Every staff member in the tenant is listed, including those with no sales in the range, so the table reconciles against the roster. Money follows the daily report's definition (`gross` counts every sale row regardless of status, `net` = gross − refunds); voided transactions are reported separately.
+
+**Response `200 OK`:**
+
+```json
+{
+  "date_from": "2026-10-01",
+  "date_to": "2026-10-31",
+  "timezone": "Asia/Kolkata",
+  "currency": "INR",
+  "totals": {
+    "staff_with_sales": 2,
+    "transactions": 46,
+    "tickets": 128,
+    "gross": "63904.00",
+    "refunds": "0.00",
+    "net": "63904.00"
+  },
+  "staff": [
+    {
+      "staff_id": 1,
+      "staff_code": "ST012",
+      "display_name": "Ravi Kumar",
+      "status": "active",
+      "transactions": 40,
+      "voided_transactions": 1,
+      "tickets": 120,
+      "gross": "59880.00",
+      "refunds": "0.00",
+      "net": "59880.00",
+      "avg_ticket_value": "499.00",
+      "last_sale_at": "2026-10-30T14:02:11.120000+00:00",
+      "by_event": [
+        {
+          "event_id": 1,
+          "event_code": "EV004",
+          "event_name": "Music Fest 2026",
+          "transactions": 12,
+          "tickets": 40,
+          "gross": "4796.00",
+          "refunds": "0.00"
+        }
+      ]
+    },
+    {
+      "staff_id": 7,
+      "staff_code": "ST020",
+      "display_name": "Asha",
+      "status": "active",
+      "transactions": 0,
+      "voided_transactions": 0,
+      "tickets": 0,
+      "gross": "0.00",
+      "refunds": "0.00",
+      "net": "0.00",
+      "avg_ticket_value": null,
+      "last_sale_at": null,
+      "by_event": []
+    }
+  ]
+}
+```
+
+**Errors `400`:** `date_from must be YYYY-MM-DD.` · `date_from must be on or before date_to.` · `event must be a numeric id.`
+
+> Row order is net-descending, then staff code — staff with no sales fall to the bottom.
 
 ---
 

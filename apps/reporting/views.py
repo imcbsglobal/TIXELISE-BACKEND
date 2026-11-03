@@ -8,7 +8,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -154,5 +154,194 @@ class DailyReportView(APIView):
                 "by_event": by_event,
                 "by_category": by_category,
                 "by_staff": by_staff,
+            }
+        )
+
+
+def _range_bounds(tenant, start_day, end_day):
+    """Inclusive day range -> half-open aware datetimes in the tenant's timezone."""
+    tz = ZoneInfo(tenant.timezone or "UTC")
+    start = datetime.combine(start_day, time.min, tzinfo=tz)
+    end = datetime.combine(end_day, time.min, tzinfo=tz) + timedelta(days=1)
+    return start, end
+
+
+def _parse_day(name, raw):
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be YYYY-MM-DD.")
+
+
+def _money(value):
+    return str((value or Decimal("0.00")).quantize(Decimal("0.01")))
+
+
+def _validation_error(message):
+    return Response(
+        {"error": {"code": "VALIDATION_ERROR", "message": message}}, status=400
+    )
+
+
+class StaffReportView(APIView):
+    """Per-staff sales totals plus a per-event split (MD §7.10 extension).
+
+    Every staff member in the tenant is listed, including those with no sales in
+    the range, so the table reconciles against the roster. Money keeps the daily
+    report's definition: gross counts every sale row regardless of status and
+    net = gross - recorded refunds; voided transactions are surfaced separately.
+    """
+
+    permission_classes = [IsAuthenticated, IsTenantAdmin]
+
+    def get(self, request):
+        tenant = request.tenant_obj
+        params = request.query_params
+        today = _tenant_now(tenant).date()
+
+        try:
+            start_day = (
+                _parse_day("date_from", params["date_from"])
+                if params.get("date_from")
+                else today
+            )
+            end_day = (
+                _parse_day("date_to", params["date_to"])
+                if params.get("date_to")
+                else today
+            )
+        except ValueError as exc:
+            return _validation_error(str(exc))
+
+        if start_day > end_day:
+            return _validation_error("date_from must be on or before date_to.")
+
+        event_raw = params.get("event") or ""
+        staff_raw = params.get("staff") or ""
+        if event_raw and not event_raw.isdigit():
+            return _validation_error("event must be a numeric id.")
+        if staff_raw and not staff_raw.isdigit():
+            return _validation_error("staff must be a numeric id.")
+
+        start, end = _range_bounds(tenant, start_day, end_day)
+
+        sales = Sale.objects.filter(
+            tenant=tenant, created_at__gte=start, created_at__lt=end
+        )
+        tickets = Ticket.objects.filter(
+            tenant=tenant, issued_at__gte=start, issued_at__lt=end
+        )
+        if event_raw:
+            sales = sales.filter(event_id=int(event_raw))
+            tickets = tickets.filter(event_id=int(event_raw))
+        if staff_raw:
+            sales = sales.filter(staff_id=int(staff_raw))
+            tickets = tickets.filter(staff_id=int(staff_raw))
+
+        sale_rollup = {
+            row["staff_id"]: row
+            for row in sales.values("staff_id").annotate(
+                transactions=Count("id"),
+                voided=Count("id", filter=Q(status=Sale.Status.VOIDED)),
+                gross=Sum("gross_total"),
+                refunds=Sum("refund_total"),
+                last_sale_at=Max("created_at"),
+            )
+        }
+        ticket_rollup = {
+            row["staff_id"]: row["tickets"]
+            for row in tickets.values("staff_id").annotate(tickets=Count("id"))
+        }
+        ticket_by_event = {
+            (row["staff_id"], row["event_id"]): row["tickets"]
+            for row in tickets.values("staff_id", "event_id").annotate(
+                tickets=Count("id")
+            )
+        }
+
+        event_rollup = {}
+        for bucket in (
+            sales.values("staff_id", "event_id")
+            .annotate(
+                transactions=Count("id"),
+                gross=Sum("gross_total"),
+                refunds=Sum("refund_total"),
+            )
+            .order_by("event_id")
+        ):
+            event_rollup.setdefault(bucket["staff_id"], []).append(bucket)
+
+        event_map = {
+            row["id"]: row
+            for row in Event.objects.filter(tenant=tenant).values("id", "code", "name")
+        }
+
+        rows = []
+        for member in StaffProfile.objects.filter(tenant=tenant).values(
+            "id", "staff_code", "display_name", "status"
+        ):
+            rollup = sale_rollup.get(member["id"], {})
+            gross = rollup.get("gross") or Decimal("0.00")
+            refunds = rollup.get("refunds") or Decimal("0.00")
+            tickets_sold = ticket_rollup.get(member["id"], 0)
+            last_sale = rollup.get("last_sale_at")
+
+            by_event = []
+            for bucket in event_rollup.get(member["id"], []):
+                meta = event_map.get(bucket["event_id"], {})
+                by_event.append(
+                    {
+                        "event_id": bucket["event_id"],
+                        "event_code": meta.get("code", ""),
+                        "event_name": meta.get("name", ""),
+                        "transactions": bucket["transactions"],
+                        "tickets": ticket_by_event.get(
+                            (member["id"], bucket["event_id"]), 0
+                        ),
+                        "gross": _money(bucket["gross"]),
+                        "refunds": _money(bucket["refunds"]),
+                    }
+                )
+
+            rows.append(
+                {
+                    "staff_id": member["id"],
+                    "staff_code": member["staff_code"],
+                    "display_name": member["display_name"],
+                    "status": member["status"],
+                    "transactions": rollup.get("transactions", 0),
+                    "voided_transactions": rollup.get("voided", 0),
+                    "tickets": tickets_sold,
+                    "gross": _money(gross),
+                    "refunds": _money(refunds),
+                    "net": _money(gross - refunds),
+                    "avg_ticket_value": _money(gross / tickets_sold)
+                    if tickets_sold
+                    else None,
+                    "last_sale_at": last_sale.isoformat() if last_sale else None,
+                    "by_event": by_event,
+                }
+            )
+
+        # Busiest earners first; staff with no sales fall to the bottom by code.
+        rows.sort(key=lambda row: (-Decimal(row["net"]), row["staff_code"]))
+
+        gross_total, refunds_total, net_total = _totals(sales)
+
+        return Response(
+            {
+                "date_from": start_day.isoformat(),
+                "date_to": end_day.isoformat(),
+                "timezone": tenant.timezone,
+                "currency": tenant.currency,
+                "totals": {
+                    "staff_with_sales": sum(1 for row in rows if row["transactions"]),
+                    "transactions": sum(row["transactions"] for row in rows),
+                    "tickets": sum(row["tickets"] for row in rows),
+                    "gross": str(gross_total),
+                    "refunds": str(refunds_total),
+                    "net": str(net_total),
+                },
+                "staff": rows,
             }
         )

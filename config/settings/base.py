@@ -138,9 +138,18 @@ REST_FRAMEWORK = {
 
 from datetime import timedelta  # noqa: E402
 
+# Sessions last 1 year by default (525600 minutes = 365 days), so POS terminals
+# and staff stay signed in across a full season. Override per environment with
+# ACCESS_TOKEN_MINUTES / REFRESH_TOKEN_DAYS. Access tokens are not blacklisted, so
+# shortening these windows does not revoke tokens already issued — tighten both
+# before exposing this publicly.
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.environ.get("ACCESS_TOKEN_MINUTES", "15"))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.environ.get("REFRESH_TOKEN_DAYS", "7"))),
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=int(os.environ.get("ACCESS_TOKEN_MINUTES", str(365 * 24 * 60)))
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=int(os.environ.get("REFRESH_TOKEN_DAYS", "365"))
+    ),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": False,
     "AUTH_HEADER_TYPES": ("Bearer",),

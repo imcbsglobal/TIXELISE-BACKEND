@@ -1,6 +1,7 @@
 import logging
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
+from django.db.models.deletion import ProtectedError, RestrictedError
 from django.http import Http404
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
@@ -149,6 +150,17 @@ _CODE_MAP = {
 
 def api_exception_handler(exc, context):
     from rest_framework.views import exception_handler as drf_exception_handler
+
+    if isinstance(exc, (ProtectedError, RestrictedError)):
+        return Response(
+            {
+                "error": {
+                    "code": "CONFLICT",
+                    "message": "This record cannot be deleted because other records depend on it.",
+                }
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
 
     response = drf_exception_handler(exc, context)
 

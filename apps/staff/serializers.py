@@ -3,9 +3,9 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
 
+from apps.core.context import get_current_tenant_id
+from apps.staff.models import StaffProfile
 from apps.tenancy.models import TenantMembership
-
-from .models import StaffProfile
 
 User = get_user_model()
 

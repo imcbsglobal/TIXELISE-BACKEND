@@ -1,3 +1,7 @@
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -7,8 +11,45 @@ from apps.audit.services import record_audit
 from apps.core.exceptions import NotFound, TixeliseAPIException
 from apps.core.permissions import IsPlatformAdmin
 from apps.tenancy.models import Tenant
+from apps.tenancy.services import delete_tenant
 
 from .serializers import TenantCreateSerializer, TenantSerializer
+
+
+class TenantLookupView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    def get(self, request):
+        code = (request.query_params.get("code") or "").strip().upper()
+        if not code:
+            return Response({"found": False})
+
+        try:
+            req = Request(
+                "https://activate.imcbs.com/mobileapp/api/project/tixelise/",
+                headers={"User-Agent": "Tixelise-Platform"},
+            )
+            with urlopen(req, timeout=5) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (URLError, HTTPError, TimeoutError, ValueError, OSError):
+            return Response({"found": False, "error": "lookup_failed"})
+
+        customers = payload.get("customers") or []
+        for customer in customers:
+            client_id = (customer.get("client_id") or "").strip().upper()
+            if client_id == code:
+                if (customer.get("status") or "").strip().lower() != "active":
+                    return Response({"found": False, "reason": "inactive"})
+                return Response(
+                    {
+                        "found": True,
+                        "name": customer.get("customer_name") or "",
+                        "client_id": customer.get("client_id") or code,
+                        "license_key": customer.get("license_key") or "",
+                        "status": customer.get("status") or "",
+                    }
+                )
+        return Response({"found": False})
 
 
 class TenantListCreateView(generics.ListCreateAPIView):
@@ -34,7 +75,7 @@ class TenantListCreateView(generics.ListCreateAPIView):
         )
 
 
-class TenantDetailView(generics.RetrieveUpdateAPIView):
+class TenantDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
     serializer_class = TenantSerializer
 
@@ -50,6 +91,20 @@ class TenantDetailView(generics.RetrieveUpdateAPIView):
             target_type="tenant",
             target_id=tenant.id,
             metadata={"code": tenant.code},
+        )
+
+    def perform_destroy(self, instance):
+        tenant_id = instance.id
+        tenant_code = instance.code
+        tenant_name = instance.name
+        deleted = delete_tenant(instance)
+        record_audit(
+            actor=self.request.user,
+            tenant=None,
+            action="platform.tenant.deleted",
+            target_type="tenant",
+            target_id=tenant_id,
+            metadata={"code": tenant_code, "name": tenant_name, "deleted": deleted},
         )
 
 
