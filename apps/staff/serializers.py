@@ -4,6 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
 
+from apps.accounts.services import USERNAME_SCOPE_SEPARATOR, scoped_username
 from apps.core.context import get_current_tenant_id
 # The central user master client lives with the platform admin views; both
 # onboarding paths must produce identical rows apart from `user_role`.
@@ -69,8 +70,34 @@ class StaffCreateSerializer(serializers.Serializer):
         return value
 
     def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("Username already taken.")
+        """Unique inside the logged-in tenant, not across all of Tixelise."""
+        username = value.strip()
+        if not username:
+            raise serializers.ValidationError("Username is required.")
+        if USERNAME_SCOPE_SEPARATOR in username:
+            raise serializers.ValidationError(f"Username cannot contain '{USERNAME_SCOPE_SEPARATOR}'.")
+
+        key = scoped_username(self.context["tenant"].code, username)
+        if len(key) > 150:
+            raise serializers.ValidationError("Username is too long for this organization.")
+        if User.objects.filter(username=key).exists():
+            raise serializers.ValidationError(
+                "Username already taken in this organization."
+            )
+        return username
+
+    def validate_email(self, value):
+        if StaffProfile.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(
+                "This email is already used by another staff member in this organization."
+            )
+        return value
+
+    def validate_phone(self, value):
+        if StaffProfile.objects.filter(phone=value).exists():
+            raise serializers.ValidationError(
+                "This phone is already used by another staff member in this organization."
+            )
         return value
 
     def validate_password(self, value):
@@ -83,7 +110,7 @@ class StaffCreateSerializer(serializers.Serializer):
 
         with transaction.atomic():
             user = User.objects.create_user(
-                username=validated_data["username"],
+                username=scoped_username(tenant.code, validated_data["username"]),
                 password=validated_data["password"],
                 email=validated_data["email"],
             )

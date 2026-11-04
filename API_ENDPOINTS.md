@@ -174,6 +174,12 @@ POST /api/v1/auth/login/
 ```
 
 > Platform login returns the same shape with `"role": "platform_admin"` and `"tenant": null`.
+>
+> **Username resolution.** With a `tenant_code`, the serializer looks up
+> `<tenant code>::<username>` first and then the plain `username`, so a staff
+> member shared by two organizations (both called `ravi`) always resolves to
+> their own account, while accounts created before usernames were scoped — and
+> platform admins, who send no `tenant_code` — keep working unchanged.
 
 **Errors:**
 
@@ -920,7 +926,17 @@ POST /api/v1/admin/staff/
 }
 ```
 
-**Errors:** `400 VALIDATION_ERROR` — username taken, weak password (Django validators), duplicate `staff_code` in tenant, missing/ invalid `email` or `phone`.
+**Errors:** `400 VALIDATION_ERROR` — username taken in this tenant, weak password (Django validators), duplicate `staff_code` in tenant, `email` or `phone` already used by another staff member in the tenant, missing/invalid `email` or `phone`.
+
+> **Usernames are scoped to the tenant.** Two organizations may both have a
+> staff member called `ravi`. The stored login key is namespaced as
+> `<tenant code>::<username>` (`aaaa::ravi`) in the auth table; the API still
+> takes and shows the plain `ravi`, and the central master receives `ravi` too.
+> A `username` may not contain `::` and must leave room for the tenant prefix
+> inside the 150-character column. Because the key is scoped, the same
+> `username` is rejected **inside** the tenant with
+> `Username already taken in this organization.` and accepted in every other
+> tenant. `email` and `phone` follow the same tenant-level rule.
 
 > **Central user registration.** `email` and `phone` are required because the
 > staff member is also POSTed to the central user master
@@ -973,6 +989,23 @@ POST /api/v1/admin/staff/1/reset-password/
 **Response `200 OK`:** `{ "detail": "Password updated." }`
 
 **Errors:** `400 VALIDATION_ERROR` when password missing or fails validators. Password values are never echoed or logged.
+
+#### Delete staff
+
+```
+DELETE /api/v1/admin/staff/1/
+```
+
+**Response `204 No Content`** — the staff profile, their POS membership, their event
+assignments and (when the account belongs to no other organization) the auth user are
+removed. A linked central user master account is deleted first, best effort. Audited as
+`staff.deleted` with the staff code, the plain username, the number of assignments
+removed and the central outcome.
+
+**Errors:** `409 CONFLICT` when the staff member already has sales or tickets — both are
+financial and printed records and are never cascaded; the message carries the counts and
+tells the admin to deactivate instead. Also `409` when an admin targets their own staff
+profile. `403 NOT_TENANT_ADMIN` for POS staff, `404` for a staff member of another tenant.
 
 ---
 

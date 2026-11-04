@@ -9,6 +9,31 @@ User = get_user_model()
 
 DEFAULT_SUPERUSER_ENDPOINT = "https://su.myimc.in/api/superusers/endpoint/TIXELISE/EUH6POZG/"
 
+# Every account — platform admin, tenant admin and POS staff — lives in the one
+# auth table, whose `username` column is globally unique. Staff usernames only
+# have to be unique inside their own organization, so the stored key carries the
+# tenant code (`aaaa::ravi`) while the person keeps typing `ravi`. Accounts that
+# predate this scheme, and platform admins, still hold a plain username; login
+# tries the scoped key first and falls back to the plain one.
+USERNAME_SCOPE_SEPARATOR = "::"
+
+
+def scoped_username(tenant_code, username):
+    """A tenant-local username -> the key stored in ``auth_user.username``."""
+    name = (username or "").strip()
+    code = (tenant_code or "").strip().lower()
+    if not code:
+        return name
+    return f"{code}{USERNAME_SCOPE_SEPARATOR}{name}"
+
+
+def unscoped_username(stored_username):
+    """A stored key -> the username people type and the UI shows."""
+    name = stored_username or ""
+    if USERNAME_SCOPE_SEPARATOR in name:
+        return name.split(USERNAME_SCOPE_SEPARATOR, 1)[1]
+    return name
+
 
 def sync_platform_superuser_from_external_api():
     """Sync the local platform superuser with the configured external API."""
