@@ -1562,12 +1562,23 @@ Writes are forwarded to the central master and recorded in the audit log.
 {
   "client_id": "OCUWOT7VR8YJU",
   "count": 1,
+  "license_key": "ACME-LIC-0001",
+  "license_source": "remote",
+  "countries": [
+    "BAHRAIN",
+    "INDIA",
+    "KUWAIT",
+    "OMAN",
+    "QATAR",
+    "SAUDI ARABIA",
+    "UNITED ARAB EMIRATES"
+  ],
   "results": [
     {
       "id": 1,
       "client_id": "OCUWOT7VR8YJU",
       "company_name": "Acme Pvt Ltd",
-      "license_key": "LIC-ACME-0001",
+      "license_key": "ACME-LIC-0001",
       "gst_number": "32AAACA1234A1Z5",
       "pan_number": "AAACA1234A",
       "email": "info@acme.com",
@@ -1594,14 +1605,47 @@ Writes are forwarded to the central master and recorded in the audit log.
 > Not paginated: the central master answers with the full array, so `count` is the
 > number of companies this client owns.
 
+`license_key` is this client's licence as recorded by the activation service (the
+same `https://activate.imcbs.com/mobileapp/api/project/tixelise/` list that login
+already consults to reject expired licences). Only the row whose `client_id` matches
+the caller's own is read, so no other client's key can be returned. `license_source`
+says what happened:
+
+| Value | Meaning |
+| --- | --- |
+| `remote` | Match found; `license_key` is that client's key. |
+| `unknown` | The activation list has no row for this client ID; `license_key` is `""`. |
+| `unavailable` | The activation host could not be reached; `license_key` is `""`. |
+
+This is a convenience, never a dependency: a failure leaves the field blank and the
+request still returns `200`.
+
+`countries` is what the Country dropdown offers. It reuses the names behind the
+financial-year master - the same list tenant onboarding uses - so a tenant's country
+and its currency can never disagree on spelling. Values are upper-case **names**, which
+is what the master stores; `country_code` is not part of this API. The list is cached
+for 300 seconds and falls back to those seven built-in countries when the remote host is
+down, so it is never empty. Membership is deliberately **not** enforced on write: a
+record created outside Tixelise with another country name stays editable, and the form
+keeps such a stored value selectable rather than silently replacing it.
+
 #### Create a company
 
 `POST /api/v1/admin/company-master/`
 
 Send every field except `id` and `client_id`. The list above is the shape; `address_line_2`
-may be omitted and `status` defaults to `ACTIVE`. At least one of the seven product
-flags (`trellisco`, `claudius`, `melone`, `tixelise`, `trellisco_crm`, `melone_stay`,
-`trellisco_books`) must be `true`.
+may be omitted and `status` defaults to `ACTIVE`. The tenant app omits `status` too, so a
+new record always starts `ACTIVE` and saving the edit form never changes the status of an
+existing one - in either direction. `license_key` is required, and the create form
+prefills it from `license_key` on the list response above; the administrator can still
+change it, and whatever is sent is validated like any other field.
+
+Product access is normally **not sent at all**. A full payload that mentions none of
+the seven flags (`trellisco`, `claudius`, `melone`, `tixelise`, `trellisco_crm`,
+`melone_stay`, `trellisco_books`) is registered for **Tixelise only**, matching how the
+central user master registers a tenant's admin. Sending the flags explicitly is still
+accepted, and an explicit set with every flag `false` is rejected — the default only
+applies when the caller says nothing.
 
 `201 Created` returns the central master's own reply, which is a short confirmation
 rather than the full record:
@@ -1627,7 +1671,7 @@ when no company exists, and the record itself otherwise.
 | --- | --- |
 | `GET` | The full record. |
 | `PUT` | Replaces it. Every field must be sent, including all seven product flags. |
-| `PATCH` | Updates only the fields sent. Omitted product flags keep their stored value; the merged record must still have at least one flag set. |
+| `PATCH` | Updates only the fields sent. Omitted product flags keep their stored value; the merged record must still have at least one flag set. The tenant app sends **no** product flags and **no** `status` on edit, so access granted outside Tixelise and any `INACTIVE` state survive saving the form. |
 | `DELETE` | Removes it from the central master. `204` with an empty body. |
 
 `GET`, `PUT`, `PATCH` and `DELETE` all load the record first and reject it when it

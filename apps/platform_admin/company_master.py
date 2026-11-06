@@ -26,11 +26,22 @@ from apps.audit.services import record_audit
 from apps.core.exceptions import Conflict, NotFound, TixeliseAPIException, ValidationError
 from apps.core.permissions import IsTenantAdmin
 
-from .views import CENTRAL_TIMEOUT_SECONDS, _central_request
+from .views import (
+    CENTRAL_TIMEOUT_SECONDS,
+    _central_request,
+    _fetch_currency_options,
+)
 
 logger = logging.getLogger(__name__)
 
 COMPANY_MASTER_URL = "https://centralmastermanagement.imcbs.com/api/company-master/"
+# The activation service holds the client list this tenant was licensed from,
+# including the licence key. Already consulted at login to reject expired
+# licences, so this reuses an existing dependency rather than adding one.
+CLIENT_LICENSE_URL = "https://activate.imcbs.com/mobileapp/api/project/tixelise/"
+# Read-only lookup on a third-party host: short and single-attempt, matching
+# the licence check in apps.accounts.serializers.
+LOOKUP_TIMEOUT_SECONDS = 5
 
 MAX_LENGTHS = {
     "company_name": 255,
@@ -57,6 +68,10 @@ PRODUCT_FLAGS = (
     "trellisco_books",
 )
 STATUSES = ("ACTIVE", "INACTIVE")
+# A company registered through Tixelise is a Tixelise company: when a caller
+# expresses no product access at all, only Tixelise is enabled. Same convention
+# as the central user master registration in .views.
+_DEFAULT_PRODUCT_FLAGS = {field: field == "tixelise" for field in PRODUCT_FLAGS}
 SEARCH_FIELDS = (
     "company_name",
     "city",
@@ -129,6 +144,11 @@ def _validate(payload, *, partial):
             else:
                 cleaned[field] = value
 
+    # Only when no flag was mentioned: an explicit set of all-false values is
+    # still rejected below by _require_any_product.
+    if not partial and not any(field in payload for field in PRODUCT_FLAGS):
+        cleaned.update(_DEFAULT_PRODUCT_FLAGS)
+
     status_value = str(payload.get("status") or "").strip().upper()
     if status_value:
         if status_value not in STATUSES:
@@ -164,6 +184,44 @@ def _companies_for_client(client_id):
     ]
 
 
+def _license_key_for_client(client_id):
+    """Return ``(license_key, source)`` for this client from the activation list.
+
+    Never raises. A company cannot be created without a licence key, but an
+    outage here must not stop the page from loading: the caller falls back to a
+    blank field the administrator can type, so the lookup stays a convenience.
+    """
+    ok, _code, data, error = _central_request(
+        "GET", CLIENT_LICENSE_URL, timeout=LOOKUP_TIMEOUT_SECONDS, attempts=1
+    )
+    if not ok:
+        logger.warning("Client licence lookup failed: %s", error)
+        return "", "unavailable"
+
+    customers = data.get("customers") if isinstance(data, dict) else None
+    wanted = client_id.upper()
+    for customer in customers or []:
+        if not isinstance(customer, dict):
+            continue
+        if str(customer.get("client_id") or "").strip().upper() == wanted:
+            # Only this client's own row is ever read out of the list.
+            return str(customer.get("license_key") or "").strip(), "remote"
+    return "", "unknown"
+
+
+def _country_names():
+    """Country names Tixelise supports, taken from the financial-year master.
+
+    Reuses the cached options behind tenant onboarding, so the company form and
+    the tenant's currency always agree on what a country is called. Never
+    returns an empty list: that helper falls back to a built-in set when the
+    remote host is unreachable.
+    """
+    options, _source = _fetch_currency_options()
+    names = {str(item.get("country_name") or "").strip().upper() for item in options}
+    return sorted(names - {""})
+
+
 def _fetch_company(company_id, client_id):
     ok, code, data, error = _central_request(
         "GET", f"{COMPANY_MASTER_URL}{company_id}/", timeout=CENTRAL_TIMEOUT_SECONDS
@@ -196,7 +254,20 @@ class CompanyMasterView(APIView):
                 if search in " ".join(str(row.get(key) or "") for key in SEARCH_FIELDS).lower()
             ]
 
-        return Response({"client_id": client_id, "count": len(mine), "results": mine})
+        # The create form needs a licence key. Rather than make the
+        # administrator hunt for it, offer the one this client was licensed
+        # with; it stays editable and is still validated on the way out.
+        license_key, license_source = _license_key_for_client(client_id)
+        return Response(
+            {
+                "client_id": client_id,
+                "count": len(mine),
+                "license_key": license_key,
+                "license_source": license_source,
+                "countries": _country_names(),
+                "results": mine,
+            }
+        )
 
     def post(self, request):
         client_id = _client_id(request)
