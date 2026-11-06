@@ -15,5 +15,7 @@ urlpatterns = [
     path("api/v1/admin/", include("apps.reporting.urls")),
     # Central company master pass-through; see apps.platform_admin.company_master.
     path("api/v1/admin/company-master/", include("apps.platform_admin.company_master")),
+    # Central tax master pass-through; see apps.platform_admin.tax_master.
+    path("api/v1/admin/tax-master/", include("apps.platform_admin.tax_master")),
     path("api/v1/pos/", include("apps.sales.pos_urls")),
 ]

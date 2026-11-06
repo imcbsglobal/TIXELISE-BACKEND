@@ -57,6 +57,9 @@ MAX_LENGTHS = {
     "state": 100,
     "country": 100,
 }
+# The master takes the logo as base64 and caps the decoded image at 2 MB.
+# base64 inflates by roughly 4/3, so this guards the encoded form on the way out.
+MAX_LOGO_CHARS = 2_800_000
 REQUIRED_FIELDS = tuple(key for key in MAX_LENGTHS if key != "address_line_2")
 PRODUCT_FLAGS = (
     "trellisco",
@@ -123,7 +126,7 @@ def _validate(payload, *, partial):
     if not isinstance(payload, dict):
         raise ValidationError("Expected a JSON object.")
 
-    allowed = set(MAX_LENGTHS) | set(PRODUCT_FLAGS) | {"status"}
+    allowed = set(MAX_LENGTHS) | set(PRODUCT_FLAGS) | {"status", "logo"}
     unknown = sorted(
         str(key) for key in payload if key not in allowed and key not in ("id", "client_id")
     )
@@ -157,6 +160,20 @@ def _validate(payload, *, partial):
             cleaned["status"] = status_value
     elif not partial:
         cleaned["status"] = "ACTIVE"
+
+    # Logo is optional and write-only. An empty value means "no new logo was
+    # chosen", so it is left out entirely rather than sent as blank base64,
+    # which the master would reject. A real value is size-checked here; the
+    # image type is validated by the master itself.
+    if "logo" in payload:
+        logo_value = payload.get("logo")
+        if logo_value not in (None, "", []):
+            if not isinstance(logo_value, str):
+                errors["logo"] = "Logo must be a base64 string."
+            elif len(logo_value) > MAX_LOGO_CHARS:
+                errors["logo"] = "Logo is too large. Use an image under 2 MB."
+            else:
+                cleaned["logo"] = logo_value
 
     if errors:
         raise ValidationError(errors)

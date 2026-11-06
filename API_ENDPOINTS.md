@@ -1695,6 +1695,94 @@ belongs to another `client_id`, so a guessed ID can never reach another tenant's
 
 ---
 
+### 5.13 Central tax master
+
+> **Module:** `apps/platform_admin/tax_master.py` - a pass-through to the central tax master.
+
+Same reasoning as [5.12](#512-central-company-master): the tax master has no
+authentication and a plain `GET` returns **every client's** records, so the
+calls are made from the backend, never the browser. `client_id` comes from the
+JWT and is injected into every request; a value sent by the caller is refused.
+Nothing is stored locally - no table, no migration - and nothing in Tixelise
+reads these records, so no event, price, ticket or report depends on them.
+
+**Two kinds, matching the upstream paths:** `india` (GST component rates) and
+`other` (one flat rate). The kind is a validated path segment, never a
+client-supplied string interpolated freely.
+
+#### List / create
+
+`GET · POST /api/v1/admin/tax-master/{kind}/`
+
+```json
+// GET /api/v1/admin/tax-master/india/ -> 200 OK
+{
+  "client_id": "OCUWOT7VR8YJU",
+  "kind": "india",
+  "count": 2,
+  "suggested_kind": "india",
+  "cal_method": "PERCENTAGE",
+  "results": [
+    {
+      "id": 7, "client_id": "OCUWOT7VR8YJU", "code": "GST18", "name": "GST 18%",
+      "type": "GST", "cgst": "9.00", "sgst": "9.00", "igst": "18.00", "gst": "18.00",
+      "cal_method": "PERCENTAGE", "status": "ACTIVE"
+    }
+  ]
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `suggested_kind` | `india` when the tenant's currency is `INR`, otherwise `other`. A hint for which tab to open; both lists belong to this same client, so switching is always allowed. |
+| `results` | This client's rows only, read from the master's full array. Optional `?search=` matches `code`, `name` or `type`. |
+
+**POST body** - `code` (≤20, required), `name` (≤100, required), `type` (≤50,
+India only, optional), the rates (`cgst`, `sgst`, `igst`, `gst` for India; `tax`
+for other), and `status` (`ACTIVE`/`INACTIVE`, default `ACTIVE`).
+
+> **`cal_method` is not accepted.** Tixelise works in percentages, so the
+> backend always writes `PERCENTAGE` itself and a request that sends the key is
+> refused with `400`, rather than having the value quietly ignored.
+
+Rates are normalised to the two-decimal strings the master both accepts and
+returns (`9` → `"9.00"`), must fall between 0 and 100, and **zero is allowed**:
+a zero-rated or exempt supply is a real configuration. Uniqueness of `code` and
+`name` within the client is enforced by the master, and its `400` is relayed.
+
+#### One record
+
+`GET · PATCH · DELETE /api/v1/admin/tax-master/{kind}/{id}/`
+
+| Method | Behaviour |
+| --- | --- |
+| `GET` | The full record. |
+| `PATCH` | Updates only the fields sent. **The master has no partial update**, so the proxy loads the row, merges the change, and `PUT`s the complete record - including its `id` - to the *collection* URL. The caller sees ordinary PATCH semantics. |
+| `DELETE` | Removes it from the central master. `204` with an empty body. |
+
+Every one of these loads the record first and rejects it when it belongs to
+another `client_id`, reporting `404` rather than `403` so the existence of other
+tenants' records is not disclosed.
+
+> The GST component fields are not cross-checked. Real rows on the master already
+> disagree (`igst: "0.00"` against `gst: "18.00"`), and refusing a save would make
+> such a record uneditable from Tixelise. The form shows the totals instead.
+
+**Errors**
+
+| HTTP | Code | Cause |
+| --- | --- | --- |
+| 400 | `BAD_REQUEST` | `kind` is neither `india` nor `other`. |
+| 400 | `VALIDATION_ERROR` | Missing or over-length `code`/`name`, a rate outside 0-100 or not numeric, a bad `status`, `cal_method` sent, a field that does not exist on this kind (`type` on `other`), or the master rejecting the data - including a duplicate `code` or `name` within the client. |
+| 403 | `permission_denied` | Caller is not a tenant admin of this tenant. |
+| 404 | `NOT_FOUND` | Unknown ID, or the ID belongs to another client. |
+| 503 | `SERVICE_UNAVAILABLE` | The central tax master could not be reached. Nothing was written. |
+
+Writes are audited as `tax_master.created`, `tax_master.updated` and
+`tax_master.deleted` with `target_type="central.tax"`.
+
+---
+
 ## 6. POS Staff API
 
 > **Role:** `pos_staff` (login with `tenant_code`).
