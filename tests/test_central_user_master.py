@@ -428,9 +428,8 @@ class StaffCentralRegistrationTests(APITestBase):
             },
         )
         self.assertEqual(response.data["central_user_registration"]["status"], "registered")
-        # The stored key is tenant-scoped ("aaaa::anita"); the master sees "anita".
         membership = TenantMembership.objects.get(
-            tenant=self.tenant_a, user__username__endswith="anita"
+            tenant=self.tenant_a, user__username="anita"
         )
         self.assertEqual(membership.central_user_id, "77")
 

@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.ticketing.print_profile import TicketPrintView
 from apps.ticketing.views import TicketReprintView
 
 from .pos_views import (
@@ -21,4 +22,5 @@ urlpatterns = [
     path("sales/history/", POSSaleHistoryView.as_view(), name="pos-sale-history"),
     path("tickets/<uuid:pk>/", POSTicketDetailView.as_view(), name="pos-ticket-detail"),
     path("tickets/<uuid:pk>/reprint/", TicketReprintView.as_view(), name="pos-ticket-reprint"),
+    path("tickets/<uuid:pk>/print/", TicketPrintView.as_view(), name="pos-ticket-print"),
 ]

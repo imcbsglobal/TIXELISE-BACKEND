@@ -4,6 +4,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
+
+
 # SQLite when no DATABASE_URL is set (base.py handles the switch).
 
 LOGGING = {

@@ -1,19 +1,14 @@
-from django.db import transaction
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.services import unscoped_username
 from apps.audit.services import record_audit
 from apps.core.context import get_current_tenant_id
-from apps.core.exceptions import Conflict, NotFound
+from apps.core.exceptions import NotFound
 from apps.core.permissions import IsTenantAdmin
-from apps.platform_admin.views import _delete_central_users
-from apps.sales.models import Sale
 from apps.tenancy.models import TenantMembership
-from apps.ticketing.models import Ticket
 
 from .models import StaffProfile
 from .serializers import StaffCreateSerializer, StaffProfileSerializer
@@ -50,7 +45,7 @@ class StaffListCreateView(generics.ListCreateAPIView):
             target_id=profile.id,
             metadata={
                 "staff_code": profile.staff_code,
-                "username": unscoped_username(profile.user.username),
+                "username": profile.user.username,
                 "central_user": (registration or {}).get("status", ""),
             },
         )
@@ -77,65 +72,6 @@ class StaffDetailView(generics.RetrieveUpdateAPIView):
             target_id=obj.id,
             metadata={"staff_code": obj.staff_code},
         )
-
-    def delete(self, request, *args, **kwargs):
-        """Remove a staff member who never sold anything.
-
-        Sales and tickets are financial and printed records, so they are never
-        cascaded. As soon as one exists the member can only be deactivated.
-        """
-        profile = self.get_object()
-        if profile.user_id == request.user.id:
-            raise Conflict(detail="You cannot delete your own staff profile.")
-        sales = Sale.objects.filter(staff=profile).count()
-        tickets = Ticket.objects.filter(staff=profile).count()
-        if sales or tickets:
-            raise Conflict(
-                detail=(
-                    f"{profile.staff_code} has {tickets} ticket(s) and {sales} sale(s). "
-                    "Deactivate this staff member instead: sales and tickets are "
-                    "financial records and are never deleted."
-                )
-            )
-
-        tenant = profile.tenant
-        user = profile.user
-        membership = TenantMembership.objects.filter(tenant=tenant, user=user).first()
-        staff_pk = profile.pk
-        staff_code = profile.staff_code
-        username = unscoped_username(user.username)
-        assignment_count = profile.assignments.count()
-
-        # Best effort, before the local rows go: only the membership holds the id
-        # a retry would need.
-        central_status = ""
-        if membership and membership.central_user_id:
-            results = _delete_central_users(tenant.code, [membership.central_user_id])
-            central_status = results[0].get("status", "") if results else ""
-
-        with transaction.atomic():
-            profile.assignments.all().delete()
-            if membership:
-                membership.delete()
-            profile.delete()
-            # The account may still serve another organization.
-            if not TenantMembership.objects.filter(user=user).exists():
-                user.delete()
-
-        record_audit(
-            actor=request.user,
-            tenant=tenant,
-            action="staff.deleted",
-            target_type="staff_profile",
-            target_id=staff_pk,
-            metadata={
-                "staff_code": staff_code,
-                "username": username,
-                "assignments_removed": assignment_count,
-                "central_user": central_status,
-            },
-        )
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class StaffDeactivateView(APIView):

@@ -8,11 +8,7 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.services import (
-    scoped_username,
-    sync_platform_superuser_from_external_api,
-    unscoped_username,
-)
+from apps.accounts.services import sync_platform_superuser_from_external_api
 from apps.core.exceptions import TixeliseAPIException
 from apps.tenancy.models import Tenant, TenantMembership
 
@@ -71,18 +67,9 @@ class LoginSerializer(serializers.Serializer):
         if not tenant_code:
             sync_platform_superuser_from_external_api()
 
-        # Staff keys are namespaced with the tenant code; older rows and platform
-        # admins still hold a plain username, so both forms are tried.
-        lookup_keys = [username]
-        if tenant_code:
-            lookup_keys.insert(0, scoped_username(tenant_code, username))
-
-        user = None
-        for key in lookup_keys:
-            user = User.objects.filter(username=key).first()
-            if user is not None:
-                break
-        if user is None:
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
             raise serializers.ValidationError(
                 {"detail": "Invalid credentials."}, code="authentication_failed"
             )
@@ -158,11 +145,6 @@ class MembershipSerializer(serializers.ModelSerializer):
 
 class MeSerializer(serializers.ModelSerializer):
     memberships = MembershipSerializer(many=True, read_only=True)
-    # The stored key carries the tenant prefix; nobody needs to see that.
-    username = serializers.SerializerMethodField()
-
-    def get_username(self, obj):
-        return unscoped_username(obj.username)
 
     class Meta:
         model = User

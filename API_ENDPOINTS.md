@@ -174,12 +174,6 @@ POST /api/v1/auth/login/
 ```
 
 > Platform login returns the same shape with `"role": "platform_admin"` and `"tenant": null`.
->
-> **Username resolution.** With a `tenant_code`, the serializer looks up
-> `<tenant code>::<username>` first and then the plain `username`, so a staff
-> member shared by two organizations (both called `ravi`) always resolves to
-> their own account, while accounts created before usernames were scoped — and
-> platform admins, who send no `tenant_code` — keep working unchanged.
 
 **Errors:**
 
@@ -926,17 +920,7 @@ POST /api/v1/admin/staff/
 }
 ```
 
-**Errors:** `400 VALIDATION_ERROR` — username taken in this tenant, weak password (Django validators), duplicate `staff_code` in tenant, `email` or `phone` already used by another staff member in the tenant, missing/invalid `email` or `phone`.
-
-> **Usernames are scoped to the tenant.** Two organizations may both have a
-> staff member called `ravi`. The stored login key is namespaced as
-> `<tenant code>::<username>` (`aaaa::ravi`) in the auth table; the API still
-> takes and shows the plain `ravi`, and the central master receives `ravi` too.
-> A `username` may not contain `::` and must leave room for the tenant prefix
-> inside the 150-character column. Because the key is scoped, the same
-> `username` is rejected **inside** the tenant with
-> `Username already taken in this organization.` and accepted in every other
-> tenant. `email` and `phone` follow the same tenant-level rule.
+**Errors:** `400 VALIDATION_ERROR` — username taken, weak password (Django validators), duplicate `staff_code` in tenant, missing/ invalid `email` or `phone`.
 
 > **Central user registration.** `email` and `phone` are required because the
 > staff member is also POSTed to the central user master
@@ -989,23 +973,6 @@ POST /api/v1/admin/staff/1/reset-password/
 **Response `200 OK`:** `{ "detail": "Password updated." }`
 
 **Errors:** `400 VALIDATION_ERROR` when password missing or fails validators. Password values are never echoed or logged.
-
-#### Delete staff
-
-```
-DELETE /api/v1/admin/staff/1/
-```
-
-**Response `204 No Content`** — the staff profile, their POS membership, their event
-assignments and (when the account belongs to no other organization) the auth user are
-removed. A linked central user master account is deleted first, best effort. Audited as
-`staff.deleted` with the staff code, the plain username, the number of assignments
-removed and the central outcome.
-
-**Errors:** `409 CONFLICT` when the staff member already has sales or tickets — both are
-financial and printed records and are never cascaded; the message carries the counts and
-tells the admin to deactivate instead. Also `409` when an admin targets their own staff
-profile. `403 NOT_TENANT_ADMIN` for POS staff, `404` for a staff member of another tenant.
 
 ---
 
@@ -1226,6 +1193,61 @@ POST /api/v1/admin/tickets/6f9619ff-8b86-d011-b42d-00c04fc964ff/reprint/
 
 > Reprints **never create a new ticket or sale** — they increment `reprint_count` and write an audit record.
 
+#### Ticket print payload
+
+```
+GET /api/v1/admin/tickets/6f9619ff-8b86-d011-b42d-00c04fc964ff/print/
+GET /api/v1/pos/tickets/6f9619ff-8b86-d011-b42d-00c04fc964ff/print/
+```
+
+Read-only: returns what a ticket should look like on paper, including the tenant's printable header and footer. Access follows the reprint rule — a `tenant_admin` may print any ticket, a `pos_staff` only their own. Nothing is incremented.
+
+**Response `200 OK`:**
+
+```json
+{
+  "ticket": {
+    "id": "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+    "ticket_code": "DREAMS001-ST012-EV004-20261020T080128Z-000001",
+    "sequence_number": 1,
+    "status": "issued",
+    "issued_at": "2026-10-20T08:01:28.120000+00:00",
+    "issued_at_local": "20-10-2026 01:31 PM",
+    "event": {
+      "code": "EV004",
+      "name": "Music Fest 2026",
+      "venue": "Central Auditorium",
+      "start_at": "2026-11-20T14:00:00+00:00"
+    },
+    "category": "Adult",
+    "staff_code": "ST012",
+    "sale_reference": "DREAMS001-S-6800898B"
+  },
+  "print": {
+    "header": "TASK MOBILE APPLICATION",
+    "footer": "Thank you — please visit again!",
+    "customized": true
+  }
+}
+```
+
+> `issued_at` is UTC; `issued_at_local` is the same moment in the tenant's timezone.
+
+#### Ticket print settings
+
+```
+GET   /api/v1/admin/ticket-print/
+PATCH /api/v1/admin/ticket-print/    {"header": "TASK MOBILE APPLICATION", "footer": "Thank you!"}
+```
+
+`tenant_admin` only. Stores the two printable strings in the tenant's reserved `TicketTemplate` row named `POS Print` (the existing `header` / `footer` config keys) — no schema change or migration is involved.
+
+Both fields are optional and independent: omitted keys keep their current value, an empty string clears it. `header` falls back to the tenant name and `footer` to nothing, so printing works before anything is configured. Limits: `header` 80 characters, `footer` 200.
+
+**Response `200 OK`:** `{"header": "...", "footer": "...", "customized": true}`
+
+**Errors `400`:** `Unknown fields: <name>` · `header must be a string.` · `header must be at most 80 characters.`
+
 ---
 
 ### 5.10 Reports
@@ -1341,6 +1363,125 @@ Every staff member in the tenant is listed, including those with no sales in the
 
 > Row order is net-descending, then staff code — staff with no sales fall to the bottom.
 
+#### Staff sales summary
+
+```
+GET /api/v1/admin/reports/staff-summary/?date_from=2026-10-01&date_to=2026-10-31
+```
+
+A lightweight, standalone counterpart to the staff report: three numbers per staff member only — tickets sold, transactions, and gross amount.
+
+**Roles:** `tenant_admin` sees every staff member (`"scope": "tenant"`). `pos_staff` is also allowed, but is scoped to **their own row only** (`"scope": "self"`) — a staff token can never read another staff member's takings, and `totals` then describes that one row.
+
+(`date_from` / `date_to` optional, `YYYY-MM-DD`, inclusive, resolved in the tenant timezone. No params = **today**; `date_from` alone spans it to today; `date_to` alone covers that single day.)
+
+**Response `200 OK`:**
+
+```json
+{
+  "date_from": "2026-10-01",
+  "date_to": "2026-10-31",
+  "timezone": "Asia/Kolkata",
+  "currency": "INR",
+  "scope": "tenant",
+  "totals": { "tickets": 128, "transactions": 46, "amount": "63904.00" },
+  "staff": [
+    {
+      "staff_id": 1,
+      "staff_code": "ST012",
+      "display_name": "Ravi Kumar",
+      "tickets": 120,
+      "transactions": 40,
+      "amount": "59880.00"
+    },
+    {
+      "staff_id": 7,
+      "staff_code": "ST020",
+      "display_name": "Asha",
+      "tickets": 0,
+      "transactions": 0,
+      "amount": "0.00"
+    }
+  ]
+}
+```
+
+**Errors `400`:** `date_from and date_to must be YYYY-MM-DD.` · `date_from must be on or before date_to.`
+
+**Errors `403`:** `permission_denied` for any role other than `tenant_admin` / `pos_staff`, or `No active staff profile.` when a `pos_staff` caller has no active staff record.
+
+> `amount` is the sum of `gross_total`, matching the daily report. Every staff member is listed (zeros included) and rows are amount-descending, then staff code.
+
+#### Staff sales detail
+
+```
+GET /api/v1/admin/reports/staff-sales/?date_from=2026-10-01&date_to=2026-10-31&staff=1
+```
+
+Every sale as its own row, newest first, with the item breakdown — the detail behind the summary above.
+
+| Param | Required | Notes |
+|---|---|---|
+| `date_from` / `date_to` | no | `YYYY-MM-DD`, inclusive, tenant timezone. No params = **today**; `date_from` alone spans to today; `date_to` alone covers that day. |
+| `staff` | no | Numeric staff id. Ignored for `pos_staff`, who are always pinned to their own sales. |
+| `limit` / `offset` | no | Default `500` / `0`, `limit` capped at `2000`. `count` and `totals` still describe the **whole** range, not the returned page. |
+
+**Roles:** `tenant_admin` sees every staff member (`"scope": "tenant"`); `pos_staff` sees only their own sales (`"scope": "self"`).
+
+**Response `200 OK`:**
+
+```json
+{
+  "date_from": "2026-11-05",
+  "date_to": "2026-11-05",
+  "timezone": "Asia/Kolkata",
+  "currency": "INR",
+  "scope": "tenant",
+  "count": 8,
+  "returned": 8,
+  "limit": 500,
+  "offset": 0,
+  "totals": {
+    "tickets": 24,
+    "transactions": 8,
+    "amount": "6286.00",
+    "refunds": "0.00",
+    "net": "6286.00"
+  },
+  "sales": [
+    {
+      "sale_id": 41,
+      "sale_reference": "OCUWOT7VR8YJU-S-87614C61",
+      "created_at": "2026-11-05T06:11:51.120000+00:00",
+      "date": "2026-11-05",
+      "time": "11:41:51",
+      "status": "completed",
+      "event_id": 1,
+      "event_code": "GOCART",
+      "event_name": "Kakkanad",
+      "staff_id": 3,
+      "staff_code": "STOO2",
+      "staff_name": "sajith",
+      "tickets": 5,
+      "items": [
+        { "category_id": 1, "category_code": "ADULT", "category_name": "Adult", "quantity": 2, "unit_price": "100.00", "line_total": "200.00" },
+        { "category_id": 2, "category_code": "CHILD", "category_name": "Child", "quantity": 1, "unit_price": "50.00", "line_total": "50.00" },
+        { "category_id": 3, "category_code": "VIP", "category_name": "VIP", "quantity": 2, "unit_price": "150.00", "line_total": "300.00" }
+      ],
+      "gross_total": "550.00",
+      "refund_total": "0.00",
+      "net_total": "550.00"
+    }
+  ]
+}
+```
+
+> `created_at` is UTC; `date` / `time` are the same moment rendered in the tenant's timezone. `tickets` is the number of tickets issued for that sale, while `items` is the priced breakdown (they can differ — one line can cover several tickets).
+
+**Errors `400`:** `date_from and date_to must be YYYY-MM-DD.` · `date_from must be on or before date_to.` · `limit and offset must be integers.` · `staff must be a numeric id.`
+
+**Errors `403`:** `permission_denied` for any role other than `tenant_admin` / `pos_staff`, or `No active staff profile.` for a `pos_staff` caller without an active staff record.
+
 ---
 
 ### 5.11 Audit log
@@ -1387,9 +1528,126 @@ GET /api/v1/admin/audit-logs/?action=sale.created&actor=3&target_type=ticket
 }
 ```
 
-**Recorded actions:** `auth.login` · `platform.tenant.created|updated|activated|suspended|deactivated` · `event.created|updated|active|completed|cancelled` · `category.*` · `price.created|updated` · `template.created` · `staff.created|updated|deactivated|password_reset` · `assignment.created|revoked` · `sale.created` · `ticket.reprint`.
+**Recorded actions:** `auth.login` · `platform.tenant.created|updated|activated|suspended|deactivated` · `event.created|updated|active|completed|cancelled` · `category.*` · `price.created|updated` · `template.created` · `ticket_print.updated` · `staff.created|updated|deactivated|password_reset` · `assignment.created|revoked` · `sale.created` · `ticket.reprint` · `company_master.created|updated|replaced|deleted`.
 
 > Passwords and tokens are never written to audit records. Access is restricted to tenant admins of that tenant.
+
+---
+
+### 5.12 Central company master
+
+Company records are **not stored in Tixelise**. They live in the central company
+master on a third-party host, which has no authentication of its own and returns
+every client's companies to anyone who asks. These endpoints are an authenticated
+pass-through to it:
+
+- the `client_id` is taken from the JWT (it is the tenant code) and is **never**
+  read from the request body;
+- reads are filtered to that `client_id`, and a record belonging to another client
+  is reported as `NOT_FOUND` rather than forbidden, so the existence of other
+  tenants' records is not disclosed;
+- nothing is cached or copied locally, so there is no sync to keep in step.
+
+Writes are forwarded to the central master and recorded in the audit log.
+
+#### List companies
+
+`GET /api/v1/admin/company-master/`
+
+| Query | Required | Description |
+| --- | --- | --- |
+| `search` | No | Case-insensitive match on company name, city, district, state, email, phone, GST, PAN or license key. Applied after scoping to the client. |
+
+```json
+{
+  "client_id": "OCUWOT7VR8YJU",
+  "count": 1,
+  "results": [
+    {
+      "id": 1,
+      "client_id": "OCUWOT7VR8YJU",
+      "company_name": "Acme Pvt Ltd",
+      "license_key": "LIC-ACME-0001",
+      "gst_number": "32AAACA1234A1Z5",
+      "pan_number": "AAACA1234A",
+      "email": "info@acme.com",
+      "phone_number": "9876543210",
+      "address_line_1": "1st Floor, MG Road",
+      "address_line_2": "",
+      "city": "Malappuram",
+      "district": "Malappuram",
+      "state": "Kerala",
+      "country": "INDIA",
+      "trellisco": false,
+      "claudius": false,
+      "melone": false,
+      "tixelise": true,
+      "trellisco_crm": false,
+      "melone_stay": false,
+      "trellisco_books": false,
+      "status": "ACTIVE"
+    }
+  ]
+}
+```
+
+> Not paginated: the central master answers with the full array, so `count` is the
+> number of companies this client owns.
+
+#### Create a company
+
+`POST /api/v1/admin/company-master/`
+
+Send every field except `id` and `client_id`. The list above is the shape; `address_line_2`
+may be omitted and `status` defaults to `ACTIVE`. At least one of the seven product
+flags (`trellisco`, `claudius`, `melone`, `tixelise`, `trellisco_crm`, `melone_stay`,
+`trellisco_books`) must be `true`.
+
+`201 Created` returns the central master's own reply, which is a short confirmation
+rather than the full record:
+
+```json
+{ "message": "Company created successfully.", "id": 1 }
+```
+
+**One company per tenant.** A `POST` is refused with `409 CONFLICT` when the client
+already has a record in the central master, so the create path cannot accumulate
+second and third companies. Because Tixelise stores no company data of its own,
+this check reads the central master first; two creates submitted in the same
+instant could therefore both pass it. The tenant app shows the create form only
+when no company exists, and the record itself otherwise.
+
+#### One company
+
+`GET · PUT · PATCH · DELETE /api/v1/admin/company-master/{id}/`
+
+`{id}` is the numeric central-master ID.
+
+| Method | Behaviour |
+| --- | --- |
+| `GET` | The full record. |
+| `PUT` | Replaces it. Every field must be sent, including all seven product flags. |
+| `PATCH` | Updates only the fields sent. Omitted product flags keep their stored value; the merged record must still have at least one flag set. |
+| `DELETE` | Removes it from the central master. `204` with an empty body. |
+
+`GET`, `PUT`, `PATCH` and `DELETE` all load the record first and reject it when it
+belongs to another `client_id`, so a guessed ID can never reach another tenant's data.
+
+**Errors**
+
+| HTTP | Code | Cause |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Missing or over-length field, bad `status`, a non-boolean product flag, no product flag enabled, an unknown key, or the central master rejecting the data (including a duplicate within the client, e.g. `license_key: This license key already exists for this client.`). |
+| 403 | `permission_denied` | Caller is not a tenant admin of this tenant. |
+| 404 | `NOT_FOUND` | Unknown ID, or the ID belongs to another client. |
+| 409 | `CONFLICT` | `POST` only: this client ID already has a company. Edit it via `PATCH` instead. |
+| 503 | `SERVICE_UNAVAILABLE` | The central master could not be reached, or answered 503 because its client-ID validation service is down. Nothing was written. |
+
+> The central master is a shared host and a validated create can take several
+> seconds; these calls use the 20-second timeout and single retry already used for
+> the central currency and user masters. A transport failure is retried safely
+> because the master enforces uniqueness per client, so a repeated attempt is
+> rejected rather than duplicated.
 
 ---
 

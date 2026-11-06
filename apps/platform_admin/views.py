@@ -9,7 +9,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.services import unscoped_username
 from apps.audit.services import record_audit
 from apps.core.exceptions import NotFound, TixeliseAPIException
 from apps.core.permissions import IsPlatformAdmin
@@ -278,14 +277,11 @@ def _central_request(method, url, payload=None, timeout=CENTRAL_TIMEOUT_SECONDS,
 def _central_user_payload(
     tenant, user, password, role="ADMIN", phone=None, first_name=None, last_name=None
 ):
-    # The master scopes accounts by client_id, so it wants the plain username the
-    # person types, not the tenant-prefixed key stored locally.
-    username = unscoped_username(user.username)
     return {
         "client_id": tenant.code,
-        "first_name": first_name or user.first_name or username,
+        "first_name": first_name or user.first_name or user.username,
         "last_name": last_name or user.last_name or "-",
-        "username": username,
+        "username": user.username,
         "password": password,
         "email": user.email,
         # Staff need their own number: the master enforces uniqueness per
@@ -329,9 +325,7 @@ def _link_central_user(membership, row, status_word, detail):
 
 def _read_back_central_user(tenant, membership):
     """The create response is only ``{"message": ...}``, so the id is read back."""
-    existing, checked = _find_central_user(
-        tenant.code, unscoped_username(membership.user.username)
-    )
+    existing, checked = _find_central_user(tenant.code, membership.user.username)
     if checked and existing:
         return _link_central_user(
             membership, existing, "registered", "Registered in the central user master."
@@ -361,11 +355,10 @@ def _register_central_user(
     ``role`` is ``ADMIN`` for a tenant admin and ``USER`` for POS staff; those are
     the only two values the master documents.
     ``check_existing`` belongs to the retry path. A freshly created account
-    cannot already exist (a username is unique inside its tenant here), so the
+    cannot already exist (usernames are unique platform-wide here), so the
     create paths skip the lookup and save a round trip to a slow host.
     """
     user = membership.user
-    username = unscoped_username(user.username)
 
     if membership.central_user_id:
         return {
@@ -375,7 +368,7 @@ def _register_central_user(
         }
 
     if check_existing:
-        existing, checked = _find_central_user(tenant.code, username)
+        existing, checked = _find_central_user(tenant.code, user.username)
         if not checked:
             return {
                 "status": "failed",
@@ -416,7 +409,7 @@ def _register_central_user(
     # The write may have landed before the response was lost. Never report a
     # failure without checking: that is exactly what made a real success look
     # like an outage.
-    existing, checked = _find_central_user(tenant.code, username)
+    existing, checked = _find_central_user(tenant.code, user.username)
     if checked and existing:
         return _link_central_user(
             membership,

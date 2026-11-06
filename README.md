@@ -86,9 +86,10 @@ real `SELECT ... FOR UPDATE` row locking on the ticket sequence.
 | Staff | `GET|POST /admin/staff/` · `GET|PATCH /admin/staff/{id}/` · `POST /admin/staff/{id}/deactivate|reset-password/` |
 | Assignments | `GET|POST /admin/assignments/` · `POST /admin/assignments/{id}/revoke/` |
 | Sales | `GET /admin/sales/?event=&staff=&date_from=&date_to=` · `GET /admin/sales/{id}/` |
-| Tickets | `GET /admin/tickets/` · `GET /admin/tickets/{id}/` · `POST /admin/tickets/{id}/reprint/` |
-| Reports | `GET /admin/reports/daily/?date=YYYY-MM-DD` · `GET /admin/reports/staff/?date_from=&date_to=` |
+| Tickets | `GET /admin/tickets/` · `GET /admin/tickets/{id}/` · `POST /admin/tickets/{id}/reprint/` · `GET /admin/tickets/{id}/print/` · `GET|PATCH /admin/ticket-print/` |
+| Reports | `GET /admin/reports/daily/?date=YYYY-MM-DD` · `GET /admin/reports/staff/?date_from=&date_to=` · `GET /admin/reports/staff-summary/?date_from=&date_to=` · `GET /admin/reports/staff-sales/?date_from=&date_to=` |
 | Audit | `GET /admin/audit-logs/?action=&actor=` |
+| Company (central) | `GET /admin/company-master/?search=` · `POST /admin/company-master/` · `GET|PUT|PATCH|DELETE /admin/company-master/{id}/` — authenticated pass-through to the central company master, always scoped to this tenant's client ID; one company per client (`409` on a second create); nothing is stored locally |
 
 ### POS (`pos_staff` only)
 | Method | Path | Notes |
@@ -135,8 +136,8 @@ enforced by database constraints, not application checks.
 - Assignments are re-checked on **every** sale, not just at login.
 - All errors return `{"error": {"code", "message"}}` with a correlation id
   echoed in `X-Correlation-ID` and stored on audit records.
-- Audit log covers login, tenant/staff/event/price/assignment changes, sales
-  and reprints; never records passwords or tokens.
+- Audit log covers login, tenant/staff/event/price/assignment changes, sales,
+  reprints and company-master writes; never records passwords or tokens.
 
 ## Project layout
 
