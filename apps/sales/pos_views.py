@@ -47,7 +47,8 @@ class POSEventListView(APIView):
                     "name": e.name,
                     "venue": e.venue,
                     "start_at": e.start_at.isoformat(),
-                    "end_at": e.end_at.isoformat(),
+                    "end_at": e.end_at.isoformat() if e.end_at else None,
+                    "event_type": e.event_type,
                 }
                 for e in events
             ]

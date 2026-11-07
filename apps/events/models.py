@@ -10,13 +10,25 @@ class Event(TenantOwnedModel):
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
 
+    class EventType(models.TextChoices):
+        REGULAR = "regular", "Regular"
+        PERIODICAL = "periodical", "Periodical"
+
+    # Existing rows keep the old behaviour; new events opt in explicitly.
+    event_type = models.CharField(
+        max_length=16,
+        choices=EventType.choices,
+        default=EventType.PERIODICAL,
+        db_index=True,
+    )
     code = models.CharField(max_length=32)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     venue = models.CharField(max_length=255, blank=True, default="")
     address = models.CharField(max_length=500, blank=True, default="")
     start_at = models.DateTimeField()
-    end_at = models.DateTimeField()
+    # A regular event never ends, so `end_at` is the only nullable boundary.
+    end_at = models.DateTimeField(null=True, blank=True)
     sales_start_at = models.DateTimeField(null=True, blank=True)
     sales_end_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
@@ -43,6 +55,10 @@ class Event(TenantOwnedModel):
 
     def __str__(self):
         return f"{self.code} — {self.name}"
+
+    @property
+    def is_regular(self):
+        return self.event_type == self.EventType.REGULAR
 
     def is_within_sales_window(self, when=None):
         from django.utils import timezone
