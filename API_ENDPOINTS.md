@@ -109,6 +109,8 @@ Tenant context comes **only from verified JWT claims**. Every request re-checks 
  │   POST /pos/sales/  (Idempotency-Key)                                 │
  │        → validates assignment → window → price → locks sequence       │
  │        → Sale + Tickets committed → print payload returned            │
+ │   GET  /pos/tickets/{id}/print/   → header/footer + ticket payload   │
+ │   GET|PATCH /pos/ticket-print/    → printed header + footer          │
  │   POST /pos/tickets/{id}/reprint/  → printer retry (no new ticket)    │
  └────────────────────────────────────────────────────────────────────────┘
                                   │
@@ -1992,6 +1994,45 @@ POST /api/v1/pos/tickets/6f9619ff-8b86-d011-b42d-00c04fc964ff/reprint/
 ```
 
 > **Golden rule:** a printer failure triggers a *reprint of the existing ticket*, never ticket regeneration.
+
+### 6.7 Ticket print header / footer
+
+```
+GET   /api/v1/pos/ticket-print/
+PUT   /api/v1/pos/ticket-print/    {"header": "TASK MOBILE APPLICATION", "footer": "Thank you!"}
+PATCH /api/v1/pos/ticket-print/    {"footer": "Thank you — please visit again!"}
+```
+
+`pos_staff` only (`tenant_admin` uses `/api/v1/admin/ticket-print/`; both write the same row).
+
+Stores the two printable strings in the tenant's reserved `TicketTemplate` row named `POS Print` (`header` / `footer` config keys) — no schema change, no migration. `GET` is safe to call before anything is configured.
+
+- Both fields are optional and independent: omitted keys keep their current value, an empty string clears it.
+- `header` falls back to the tenant name and `footer` to nothing, so printing works out of the box.
+- Limits: `header` 80 characters, `footer` 200.
+- Whitelisted keys only — anything else is rejected.
+
+**Response `200 OK`:**
+
+```json
+{
+  "header": "TASK MOBILE APPLICATION",
+  "footer": "Thank you — please visit again!",
+  "customized": true
+}
+```
+
+**Errors:**
+
+| Status | Code | Cause |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | `Unknown fields: <name>` · `header must be a string.` · `header must be at most 80 characters.` |
+| 401 | `UNAUTHORIZED` | No/invalid token |
+| 403 | `NOT_POS_STAFF` | Caller is not an active `pos_staff` of the tenant |
+
+> **Security tradeoff:** the profile is **tenant-wide**, so any staff member editing it re-brands every ticket printed by every staff member of that tenant. Every save is audited as `ticket_print.updated` with the actor, and a `tenant_admin` can overwrite the same strings at any time from the admin endpoint.
+
+> **Trailing slash:** like every other endpoint, the canonical path ends with `/`. `PATCH`/`PUT` to `/api/v1/pos/ticket-print` (no slash) will not be redirected with its body intact — call the slashed path.
 
 ---
 

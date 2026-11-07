@@ -100,6 +100,7 @@ real `SELECT ... FOR UPDATE` row locking on the ticket sequence.
 | GET | `/pos/sales/history/` | own sales |
 | GET | `/pos/tickets/{id}/` | own tickets only |
 | POST | `/pos/tickets/{id}/reprint/` | records reprint, never re-issues |
+| GET\|PUT\|PATCH | `/pos/ticket-print/` | read/edit the printed header + footer (tenant-wide) |
 
 Example sale:
 

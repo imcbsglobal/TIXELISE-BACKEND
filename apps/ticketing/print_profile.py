@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from apps.audit.services import record_audit
 from apps.catalog.models import TicketTemplate
 from apps.core.exceptions import Forbidden, NotFound
-from apps.core.permissions import IsTenantAdmin
+from apps.core.permissions import IsPOSSStaff, IsTenantAdmin
 
 from .models import Ticket
 
@@ -107,6 +107,22 @@ class TicketPrintProfileView(APIView):
             },
         )
         return Response(print_profile(tenant))
+
+
+class POSTicketPrintProfileView(TicketPrintProfileView):
+    """Read / update the two printable strings. `pos_staff` only.
+
+    Same storage and validation as the admin endpoint, exposed under `/pos/`
+    so a POS client never has to call `/admin/`.
+
+    Security tradeoff: the profile is tenant-wide, so any POS staff member
+    editing it re-brands **every** printed ticket for the whole tenant. Access
+    is still bounded by an active tenant membership, every save is audited as
+    `ticket_print.updated` with the actor, and a `tenant_admin` can overwrite
+    the same strings at any time via `/api/v1/admin/ticket-print/`.
+    """
+
+    permission_classes = [IsAuthenticated, IsPOSSStaff]
 
 
 class TicketPrintView(APIView):
