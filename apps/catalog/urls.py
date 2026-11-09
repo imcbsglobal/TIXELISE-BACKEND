@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     EventPriceDetailView,
     EventPriceListCreateView,
+    EventPriceStatusView,
     TicketCategoryDetailView,
     TicketCategoryListCreateView,
     TicketCategoryStatusView,
@@ -20,6 +21,11 @@ urlpatterns = [
     ),
     path("prices/", EventPriceListCreateView.as_view(), name="admin-prices"),
     path("prices/<int:pk>/", EventPriceDetailView.as_view(), name="admin-price-detail"),
+    path(
+        "prices/<int:pk>/status/",
+        EventPriceStatusView.as_view(),
+        name="admin-price-status",
+    ),
     path("ticket-templates/", TicketTemplateListCreateView.as_view(), name="admin-templates"),
     path(
         "ticket-templates/<int:pk>/",

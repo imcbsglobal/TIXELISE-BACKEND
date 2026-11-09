@@ -39,10 +39,12 @@ class EventListCreateView(generics.ListCreateAPIView):
         return qs
 
     def perform_create(self, serializer):
+        # The starting status comes from the payload (the New event form sends
+        # `active`); callers that omit it, such as the setup wizard, fall back to
+        # the model default (draft).
         event = serializer.save(
             tenant_id=get_current_tenant_id(),
             created_by=self.request.user,
-            status=Event.Status.DRAFT,
         )
         record_audit(
             actor=self.request.user,

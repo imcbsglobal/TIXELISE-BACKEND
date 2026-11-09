@@ -24,7 +24,7 @@ class EventSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "status", "created_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
         # Regular events carry no schedule, so required-ness is decided in validate().
         extra_kwargs = {
             "start_at": {"required": False},
@@ -72,6 +72,24 @@ class EventSerializer(serializers.ModelSerializer):
                 {"sales_end_at": "Sales end must be after sales start."}
             )
         return attrs
+
+    def validate_status(self, value):
+        """Status may be chosen once, at creation; later changes use the actions.
+
+        The New event form creates a live event in one step, so `active` is
+        allowed up front. Completed/cancelled are lifecycle transitions and are
+        never a valid starting point.
+        """
+        if self.instance is not None:
+            raise serializers.ValidationError(
+                "Event status cannot be edited here. Use the activate, complete or "
+                "cancel actions instead."
+            )
+        if value not in {Event.Status.DRAFT, Event.Status.ACTIVE}:
+            raise serializers.ValidationError(
+                "A new event can only start as draft or active."
+            )
+        return value
 
     def validate_code(self, value):
         if not value.isalnum():
