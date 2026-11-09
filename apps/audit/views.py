@@ -10,7 +10,7 @@ class AuditLogListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
     def get_queryset(self):
-        qs = AuditLog.objects.exclude(tenant=None)
+        qs = AuditLog.objects.filter(tenant=self.request.tenant_obj)
         params = self.request.query_params
         if params.get("action"):
             qs = qs.filter(action=params["action"])

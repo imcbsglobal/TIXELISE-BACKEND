@@ -30,6 +30,7 @@ class ReportingTests(APITestBase):
         self.assertEqual(response.data["completed_sales_today"], 1)
         self.assertEqual(response.data["gross_sales_today"], "998.00")
         self.assertEqual(response.data["active_events"], 1)
+        self.assertEqual(response.data["active_ticket_types"], 2)
         self.assertEqual(response.data["active_staff"], 1)
 
     def test_daily_report_breakdowns(self):

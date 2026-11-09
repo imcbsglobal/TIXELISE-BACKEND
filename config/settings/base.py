@@ -58,6 +58,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.core.middleware.CorrelationIdMiddleware",
     "apps.core.middleware.TenantContextMiddleware",
+    "apps.audit.middleware.AuditRetentionMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -205,6 +206,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 5  # 5 MB request cap
+
+# Audit rows older than this many days are pruned automatically (3 weeks).
+AUDIT_LOG_RETENTION_DAYS = int(os.environ.get("AUDIT_LOG_RETENTION_DAYS", "21"))
 
 # ---------------------------------------------------------------------------
 # Central master integration

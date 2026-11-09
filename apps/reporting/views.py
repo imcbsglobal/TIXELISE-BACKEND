@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.catalog.models import TicketCategory
 from apps.core.permissions import IsTenantAdmin
 from apps.events.models import Event
 from apps.sales.models import Sale
@@ -61,6 +62,10 @@ class DashboardView(APIView):
             tenant=tenant, issued_at__gte=start, issued_at__lt=end
         ).count()
 
+        active_ticket_types = TicketCategory.objects.filter(
+            tenant=tenant, status=TicketCategory.Status.ACTIVE
+        ).count()
+
         return Response(
             {
                 "date": today.isoformat(),
@@ -73,6 +78,7 @@ class DashboardView(APIView):
                 "active_events": Event.objects.filter(
                     tenant=tenant, status=Event.Status.ACTIVE
                 ).count(),
+                "active_ticket_types": active_ticket_types,
                 "active_staff": StaffProfile.objects.filter(
                     tenant=tenant, status=StaffProfile.Status.ACTIVE
                 ).count(),
@@ -85,21 +91,65 @@ class DailyReportView(APIView):
 
     def get(self, request):
         tenant = request.tenant_obj
-        date_param = request.query_params.get("date")
-        if date_param:
-            try:
-                day = datetime.strptime(date_param, "%Y-%m-%d").date()
-            except ValueError:
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+
+        if date_from or date_to:
+            if not (date_from and date_to):
                 return Response(
-                    {"error": {"code": "VALIDATION_ERROR", "message": "date must be YYYY-MM-DD."}},
+                    {
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "date_from and date_to must both be provided.",
+                        }
+                    },
                     status=400,
                 )
+            try:
+                start_day = datetime.strptime(date_from, "%Y-%m-%d").date()
+                end_day = datetime.strptime(date_to, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "date_from and date_to must be YYYY-MM-DD.",
+                        }
+                    },
+                    status=400,
+                )
+            if start_day > end_day:
+                return Response(
+                    {
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "date_from must be on or before date_to.",
+                        }
+                    },
+                    status=400,
+                )
+            start, _ = _day_bounds(tenant, start_day)
+            _, end = _day_bounds(tenant, end_day)
         else:
-            day = _tenant_now(tenant).date()
-
-        start, end = _day_bounds(tenant, day)
+            date_param = request.query_params.get("date")
+            if date_param:
+                try:
+                    start_day = end_day = datetime.strptime(date_param, "%Y-%m-%d").date()
+                except ValueError:
+                    return Response(
+                        {"error": {"code": "VALIDATION_ERROR", "message": "date must be YYYY-MM-DD."}},
+                        status=400,
+                    )
+            else:
+                start_day = end_day = _tenant_now(tenant).date()
+            start, end = _day_bounds(tenant, start_day)
         sales = _sales_between(tenant, start, end)
         gross, refunds, net = _totals(sales)
+
+        today_start, today_end = _day_bounds(tenant, _tenant_now(tenant).date())
+        sales_today, _refunds_today, _net_today = _totals(
+            _sales_between(tenant, today_start, today_end)
+        )
 
         tickets = Ticket.objects.filter(
             tenant=tenant, issued_at__gte=start, issued_at__lt=end
@@ -119,8 +169,14 @@ class DailyReportView(APIView):
         from apps.events.models import Event as E
 
         code_map = dict(E.objects.filter(tenant=tenant).values_list("id", "code"))
+        cents = Decimal("0.01")
+        event_amounts = {
+            row["event_id"]: (row["amount"] or Decimal("0.00")).quantize(cents)
+            for row in sales.values("event_id").annotate(amount=Sum("gross_total"))
+        }
         for row in by_event:
             row["event_code"] = code_map.get(row["event_id"], "")
+            row["amount"] = str(event_amounts.get(row["event_id"], Decimal("0.00")))
 
         by_category = [
             {"category_id": row["category_id"], "tickets": row["quantity"]}
@@ -144,13 +200,18 @@ class DailyReportView(APIView):
 
         return Response(
             {
-                "date": day.isoformat(),
+                "date": start_day.isoformat()
+                if start_day == end_day
+                else f"{start_day.isoformat()}..{end_day.isoformat()}",
+                "date_from": start_day.isoformat(),
+                "date_to": end_day.isoformat(),
                 "timezone": tenant.timezone,
                 "tickets_sold": tickets.count(),
                 "transactions": sales.count(),
                 "gross_sales": str(gross),
                 "refunds": str(refunds),
                 "net_sales": str(net),
+                "sales_today": str(sales_today),
                 "by_event": by_event,
                 "by_category": by_category,
                 "by_staff": by_staff,
@@ -276,10 +337,12 @@ class StaffReportView(APIView):
             for row in Event.objects.filter(tenant=tenant).values("id", "code", "name")
         }
 
+        staff_qs = StaffProfile.objects.filter(tenant=tenant)
+        if staff_raw:
+            staff_qs = staff_qs.filter(id=int(staff_raw))
+
         rows = []
-        for member in StaffProfile.objects.filter(tenant=tenant).values(
-            "id", "staff_code", "display_name", "status"
-        ):
+        for member in staff_qs.values("id", "staff_code", "display_name", "status"):
             rollup = sale_rollup.get(member["id"], {})
             gross = rollup.get("gross") or Decimal("0.00")
             refunds = rollup.get("refunds") or Decimal("0.00")
