@@ -4,20 +4,27 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.services import record_audit
-from apps.core.exceptions import NotFound, Forbidden
+from apps.core.exceptions import Forbidden, NotFound
+from apps.core.permissions import IsTenantAdmin
+from apps.sales.serializers import SaleSerializer
+from apps.sales.services import issue_manual_tickets
 
 from .models import Ticket
-from .serializers import TicketSerializer
+from .serializers import (
+    ManualTicketIssueSerializer,
+    TicketListSerializer,
+    TicketSerializer,
+)
 
 
 class TicketListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = TicketSerializer
+    serializer_class = TicketListSerializer
 
     def get_queryset(self):
         from apps.core.context import get_current_role
 
-        qs = Ticket.objects.select_related("event", "staff", "category")
+        qs = Ticket.objects.select_related("event", "staff", "category", "sale")
         params = self.request.query_params
         if params.get("event"):
             qs = qs.filter(event_id=params["event"])
@@ -32,10 +39,10 @@ class TicketListView(generics.ListAPIView):
 
 class TicketDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = TicketSerializer
+    serializer_class = TicketListSerializer
 
     def get_queryset(self):
-        return Ticket.objects.select_related("event", "staff", "category")
+        return Ticket.objects.select_related("event", "staff", "category", "sale")
 
 
 class TicketReprintView(APIView):
@@ -87,4 +94,40 @@ class TicketReprintView(APIView):
                 },
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class ManualTicketIssueView(APIView):
+    """Admin-issued complimentary tickets (a zero-value, manual-sourced sale)."""
+
+    permission_classes = [IsAuthenticated, IsTenantAdmin]
+
+    def post(self, request):
+        serializer = ManualTicketIssueSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        items_data = [
+            {"category_id": item["category"], "quantity": item["quantity"]}
+            for item in serializer.validated_data["items"]
+        ]
+        idempotency_key = request.headers.get(
+            "Idempotency-Key"
+        ) or request.data.get("idempotency_key")
+
+        result = issue_manual_tickets(
+            tenant=request.tenant_obj,
+            user=request.user,
+            staff_id=serializer.validated_data["staff"],
+            event_id=serializer.validated_data["event"],
+            items_data=items_data,
+            idempotency_key=idempotency_key,
+        )
+
+        payload = SaleSerializer(result["sale"]).data
+        payload["replayed"] = result["replayed"]
+        return Response(
+            payload,
+            status=status.HTTP_201_CREATED
+            if not result["replayed"]
+            else status.HTTP_200_OK,
         )

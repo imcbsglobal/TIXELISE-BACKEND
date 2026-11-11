@@ -73,7 +73,10 @@ class StaffSalesSummaryView(APIView):
         sale_rows = {
             row["staff_id"]: row
             for row in Sale.objects.filter(
-                tenant=tenant, created_at__gte=start, created_at__lt=end
+                tenant=tenant,
+                created_at__gte=start,
+                created_at__lt=end,
+                source=Sale.Source.POS,
             )
             .values("staff_id")
             .annotate(transactions=Count("id"), amount=Sum("gross_total"))

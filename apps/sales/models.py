@@ -9,6 +9,10 @@ class Sale(TenantOwnedModel):
         VOIDED = "voided", "Voided"
         REFUNDED = "refunded", "Refunded"
 
+    class Source(models.TextChoices):
+        POS = "pos", "POS"
+        MANUAL = "manual", "Manual"
+
     sale_reference = models.CharField(max_length=64)
     event = models.ForeignKey(
         "events.Event", on_delete=models.PROTECT, related_name="sales"
@@ -18,6 +22,9 @@ class Sale(TenantOwnedModel):
     )
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.COMPLETED, db_index=True
+    )
+    source = models.CharField(
+        max_length=16, choices=Source.choices, default=Source.POS, db_index=True
     )
     gross_total = models.DecimalField(max_digits=12, decimal_places=2)
     refund_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)

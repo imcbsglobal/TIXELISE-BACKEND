@@ -56,6 +56,9 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         max_length=150, required=False, allow_blank=True, default="", write_only=True
     )
     phone = serializers.CharField(max_length=32)
+    # Filled in by the view from the central master, never from the request
+    # body, so the link is written in the same transaction as the tenant.
+    central_user_id = serializers.HiddenField(default="")
 
     class Meta:
         model = Tenant
@@ -66,6 +69,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "currency",
             "phone",
             "settings",
+            "central_user_id",
             "admin_username",
             "admin_password",
             "admin_email",
@@ -92,6 +96,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         admin_email = validated_data.pop("admin_email", "")
         admin_first_name = validated_data.pop("admin_first_name", "")
         admin_last_name = validated_data.pop("admin_last_name", "")
+        central_user_id = validated_data.pop("central_user_id", "")
 
         with transaction.atomic():
             tenant = Tenant.objects.create(status=Tenant.Status.ACTIVE, **validated_data)
@@ -106,6 +111,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 tenant=tenant,
                 user=admin,
                 role=TenantMembership.Role.TENANT_ADMIN,
+                central_user_id=central_user_id,
             )
         return tenant
 

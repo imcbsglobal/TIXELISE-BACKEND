@@ -36,7 +36,10 @@ def _day_bounds(tenant, day):
 
 def _sales_between(tenant, start, end):
     return Sale.objects.filter(
-        tenant=tenant, created_at__gte=start, created_at__lt=end
+        tenant=tenant,
+        created_at__gte=start,
+        created_at__lt=end,
+        source=Sale.Source.POS,
     )
 
 
@@ -287,7 +290,10 @@ class StaffReportView(APIView):
         start, end = _range_bounds(tenant, start_day, end_day)
 
         sales = Sale.objects.filter(
-            tenant=tenant, created_at__gte=start, created_at__lt=end
+            tenant=tenant,
+            created_at__gte=start,
+            created_at__lt=end,
+            source=Sale.Source.POS,
         )
         tickets = Ticket.objects.filter(
             tenant=tenant, issued_at__gte=start, issued_at__lt=end

@@ -24,3 +24,27 @@ class TicketSerializer(serializers.ModelSerializer):
             "issued_at",
             "reprint_count",
         ]
+
+
+class TicketListSerializer(TicketSerializer):
+    """Admin listing/detail: also reports which channel issued the ticket.
+
+    Kept separate from TicketSerializer so nested tickets inside a sale
+    (POS responses) never trigger a per-ticket sale lookup.
+    """
+
+    source = serializers.CharField(source="sale.source", read_only=True)
+
+    class Meta(TicketSerializer.Meta):
+        fields = TicketSerializer.Meta.fields + ["source"]
+
+
+class ManualTicketItemSerializer(serializers.Serializer):
+    category = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1, max_value=100)
+
+
+class ManualTicketIssueSerializer(serializers.Serializer):
+    event = serializers.IntegerField()
+    staff = serializers.IntegerField()
+    items = ManualTicketItemSerializer(many=True, allow_empty=False)

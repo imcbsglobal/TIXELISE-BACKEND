@@ -84,7 +84,10 @@ class StaffSalesDetailView(APIView):
         end = datetime.combine(end_day, time.min, tzinfo=tz) + timedelta(days=1)
 
         sales = Sale.objects.filter(
-            tenant=tenant, created_at__gte=start, created_at__lt=end
+            tenant=tenant,
+            created_at__gte=start,
+            created_at__lt=end,
+            source=Sale.Source.POS,
         )
         tickets = Ticket.objects.filter(
             tenant=tenant, issued_at__gte=start, issued_at__lt=end

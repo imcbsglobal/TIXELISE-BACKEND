@@ -201,19 +201,20 @@ def _companies_for_client(client_id):
     ]
 
 
-def _license_key_for_client(client_id):
-    """Return ``(license_key, source)`` for this client from the activation list.
+def _license_for_client(client_id):
+    """Return ``(license_key, customer_name, source)`` for this client.
 
-    Never raises. A company cannot be created without a licence key, but an
-    outage here must not stop the page from loading: the caller falls back to a
-    blank field the administrator can type, so the lookup stays a convenience.
+    Both values come from the activation list. Never raises. A company cannot be
+    created without a licence key, but an outage here must not stop the page from
+    loading: the caller falls back to blank fields the administrator can type, so
+    the lookup stays a convenience.
     """
     ok, _code, data, error = _central_request(
         "GET", CLIENT_LICENSE_URL, timeout=LOOKUP_TIMEOUT_SECONDS, attempts=1
     )
     if not ok:
         logger.warning("Client licence lookup failed: %s", error)
-        return "", "unavailable"
+        return "", "", "unavailable"
 
     customers = data.get("customers") if isinstance(data, dict) else None
     wanted = client_id.upper()
@@ -222,8 +223,12 @@ def _license_key_for_client(client_id):
             continue
         if str(customer.get("client_id") or "").strip().upper() == wanted:
             # Only this client's own row is ever read out of the list.
-            return str(customer.get("license_key") or "").strip(), "remote"
-    return "", "unknown"
+            return (
+                str(customer.get("license_key") or "").strip(),
+                str(customer.get("customer_name") or "").strip(),
+                "remote",
+            )
+    return "", "", "unknown"
 
 
 def _country_names():
@@ -271,15 +276,17 @@ class CompanyMasterView(APIView):
                 if search in " ".join(str(row.get(key) or "") for key in SEARCH_FIELDS).lower()
             ]
 
-        # The create form needs a licence key. Rather than make the
-        # administrator hunt for it, offer the one this client was licensed
-        # with; it stays editable and is still validated on the way out.
-        license_key, license_source = _license_key_for_client(client_id)
+        # The create form needs a licence key and the customer name behind it.
+        # Rather than make the administrator hunt for them, offer the values
+        # this client was licensed with; they stay editable and are still
+        # validated on the way out.
+        license_key, customer_name, license_source = _license_for_client(client_id)
         return Response(
             {
                 "client_id": client_id,
                 "count": len(mine),
                 "license_key": license_key,
+                "customer_name": customer_name,
                 "license_source": license_source,
                 "countries": _country_names(),
                 "results": mine,

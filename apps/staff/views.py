@@ -17,6 +17,53 @@ from .models import StaffProfile
 from .serializers import StaffCreateSerializer, StaffProfileSerializer
 
 
+def _central_update_fields(profile, validated_data):
+    """The central PATCH fields for the values that actually changed.
+
+    Only the three editable values the master knows about are synced. A blank
+    email or phone is treated as "leave the central value alone", because the
+    master requires both to be present and valid.
+    """
+    fields = {}
+    name = (validated_data.get("display_name") or "").strip()
+    if name and name != profile.display_name:
+        # Same split as StaffCreateSerializer: first word, then the rest.
+        first_name, _, last_name = name.partition(" ")
+        fields["first_name"] = first_name.strip() or profile.user.username
+        fields["last_name"] = last_name.strip() or "-"
+    email = (validated_data.get("email") or "").strip()
+    if email and email != (profile.email or ""):
+        fields["email"] = email
+    phone = (validated_data.get("phone") or "").strip()
+    if phone and phone != (profile.phone or ""):
+        fields["phone"] = phone
+    return fields
+
+
+def _sync_central_update(profile, validated_data):
+    """Push an edited staff member to the central user master before saving.
+
+    Fail-closed like onboarding: an outage or a rejection raises, so the local
+    row keeps its previous values instead of silently drifting from the
+    master. The call is made before the save and outside any transaction, so a
+    slow master never holds the write lock.
+    """
+    fields = _central_update_fields(profile, validated_data)
+    if not fields or not getattr(settings, "CENTRAL_USER_SYNC_ENABLED", True):
+        return {}
+    membership = TenantMembership.objects.filter(
+        tenant=profile.tenant, user=profile.user
+    ).first()
+    if membership is None or not membership.central_user_id:
+        return {}
+
+    # Imported here like the delete path: the client lives with the platform
+    # admin views so both onboarding paths produce identical rows.
+    from apps.platform_admin.views import update_central_user
+
+    return update_central_user(profile.tenant.code, membership.central_user_id, **fields)
+
+
 class StaffListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
@@ -66,6 +113,8 @@ class StaffDetailView(generics.RetrieveUpdateAPIView):
         return StaffProfile.objects.select_related("user")
 
     def perform_update(self, serializer):
+        profile = serializer.instance
+        central = _sync_central_update(profile, serializer.validated_data)
         obj = serializer.save()
         record_audit(
             actor=self.request.user,
@@ -73,7 +122,7 @@ class StaffDetailView(generics.RetrieveUpdateAPIView):
             action="staff.updated",
             target_type="staff_profile",
             target_id=obj.id,
-            metadata={"staff_code": obj.staff_code},
+            metadata={"staff_code": obj.staff_code, "central_user": central},
         )
 
     def delete(self, request, pk):

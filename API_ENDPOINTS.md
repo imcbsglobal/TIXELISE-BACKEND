@@ -120,6 +120,7 @@ Tenant context comes **only from verified JWT claims**. Every request re-checks 
  │   GET /admin/dashboard/        → today's totals                       │
  │   GET /admin/sales/?event=1    → sale detail with price snapshots     │
  │   GET /admin/tickets/          → ticket codes, statuses               │
+ │   POST /admin/tickets/manual/  → issue complimentary tickets          │
  │   GET /admin/reports/daily/    → event/category/staff breakdowns      │
  │   GET /admin/audit-logs/       → full trace with correlation IDs      │
  └────────────────────────────────────────────────────────────────────────┘
@@ -330,8 +331,8 @@ POST /api/v1/platform/tenants/
 }
 ```
 
-**Central currency registration** — after the tenant + admin are committed, the
-backend also POSTs the tenant's currency to the central currency master
+**Central currency registration** — before anything is committed, the backend
+POSTs the tenant's currency to the central currency master
 (`https://centralmastermanagement.imcbs.com/api/currency-master/currencies/`):
 
 ```json
@@ -347,19 +348,23 @@ backend also POSTs the tenant's currency to the central currency master
 |---|---|
 | `registered` | New record created in the currency master |
 | `skipped` | Tenant code + currency pair already present (checked with a read first), or `CENTRAL_CURRENCY_SYNC_ENABLED=false` |
-| `failed` | Master unreachable or returned an error |
+| `failed` | Master unreachable or returned an error — the request fails and nothing is created |
 
 > `client_id` is the tenant `code`. `name` comes from a built-in ISO map for the
 > seven currencies offered by the tenant form (`AED`, `BHD`, `INR`, `KWD`, `OMR`,
-> `QAR`, `SAR`); any other code is sent as its own name. This call is
-> **best-effort**: the tenant is already created, so a `failed` status never rolls
-> it back — the outcome is surfaced in the response and in the audit log
-> (`platform.tenant.currency_registered`).
+> `QAR`, `SAR`); any other code is sent as its own name. Onboarding is
+> **fail-closed**: a `failed` status aborts the request with
+> `503 CENTRAL_MASTER_UNAVAILABLE` (unreachable) or
+> `422 CENTRAL_REGISTRATION_FAILED` (rejected) before the tenant exists. The
+> outcome is recorded in the audit log as
+> `platform.tenant.currency_registered` only once it succeeded. No compensation
+> is needed: the call reads first and is self-healing, so a retry skips a row that
+> is already registered.
 
 > The created admin can log in **immediately**: `POST /auth/login/` with `tenant_code: "DREAMS001"`, `admin_username`, and the password you set — role `tenant_admin`. Tenant + user + membership are created atomically; if anything fails, nothing is persisted.
 
-**Central user registration** — after the currency step, the first tenant admin is
-also POSTed to the central user master
+**Central user registration** — after the currency step (and still before anything
+is committed), the first tenant admin is POSTed to the central user master
 (`https://centralmastermanagement.imcbs.com/api/user-master/`):
 
 ```json
@@ -386,17 +391,24 @@ also POSTed to the central user master
 | `central_user_registration.status` | Meaning |
 |---|---|
 | `registered` | Account created, or confirmed after a lost response; its `id` was read back and stored on the membership |
-| `skipped` | A record for this `client_id` + `username` already existed and its id was adopted, this admin is already linked, or `CENTRAL_USER_SYNC_ENABLED=false` |
-| `failed` | Master unreachable, rejected the request, or no password was supplied |
+| `skipped` | A record for this `client_id` + `username` already existed and its id was adopted, or `CENTRAL_USER_SYNC_ENABLED=false` |
+
+> A failure is never reported as a status: it aborts the request before any local
+> row exists (see the error table below).
 
 > `client_id` is the tenant `code`. Only `tixelise` is `true`; the other six product
 > flags are always sent as `false`. `user_role` is `ADMIN`.
 > The stored id (`TenantMembership.central_user_id`, surfaced read-only as
 > `admin_central_user_id`) is what makes deletion possible later.
 >
-> This call is **best-effort** and never rolls the tenant back. A `failed` status is
-> returned to the UI together with a retry path (`4.7`) and recorded in the audit
-> log as `platform.tenant.central_user_registered`.
+> Onboarding is **fail-closed**: the tenant, admin user and membership are written
+> only after this POST succeeds, in one transaction that already carries the
+> central id. An outage returns `503 CENTRAL_MASTER_UNAVAILABLE`; a rejection
+> returns `422 CENTRAL_REGISTRATION_FAILED` with the master's field detail. In
+> both cases no tenant, user or membership is created. If the local commit fails
+> after the account was created, that new central account is deleted again before
+> the error is returned (an account adopted from an earlier attempt is left
+> alone).
 >
 > **Security note:** the master stores and exposes this password in plaintext over
 > an unauthenticated `GET /api/user-master/` list. The password is never logged or
@@ -404,9 +416,11 @@ also POSTed to the central user master
 >
 > **Master response contract:** `POST` answers `201 {"message": "User created
 > successfully."}` — it does **not** return the new `id`. The id is therefore read
-> back from `GET /api/user-master/` by matching `client_id` + `username`. If that
-> read-back fails, the account still counts as `registered` but
-> `central_user_id` stays empty, so deletion cannot remove it until `4.7` runs.
+> back from `GET /api/user-master/` by matching `client_id` + `username`. The same
+> lookup runs **before** the POST, so a retried onboarding adopts the account it
+> created last time instead of posting a duplicate. If the id cannot be read back,
+> the request fails with `503` and nothing is created locally; the next attempt
+> adopts the account.
 >
 > The master enforces uniqueness **per `client_id`** on `username`, `email` and
 > `phone_number` — the tenant `phone` cannot be reused by a second admin of the
@@ -422,6 +436,8 @@ also POSTed to the central user master
 | Status | Code | Cause |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Missing `admin_username`/`admin_password`/`admin_email`/`phone`, duplicate `code`, duplicate username, weak password |
+| 422 | `CENTRAL_REGISTRATION_FAILED` | The currency or user master rejected the registration (e.g. `Unknown client_id` for an unlicensed tenant code); the message carries the master's field detail and nothing is created |
+| 503 | `CENTRAL_MASTER_UNAVAILABLE` | A central master was unreachable, timed out, or the new account could not be read back. Retrying the same request is safe: an account that already exists is adopted instead of duplicated |
 
 > `status` always starts as `active`; `id/status/created_at/updated_at` are read-only.
 
@@ -564,8 +580,9 @@ POST /api/v1/platform/tenants/1/sync-central/
 ```
 
 Re-runs the currency-master and user-master registrations for an existing tenant.
-The first attempt during creation is best-effort, and the create form cannot be
-submitted twice (duplicate `code`), so this is the only recovery path.
+New tenants cannot reach this state (creation is fail-closed), so this remains the
+repair path for tenants onboarded before that change and for any membership whose
+`central_user_id` is empty.
 
 **Request** (both optional — send `password` only when the central account does not
  exist yet):
@@ -922,7 +939,7 @@ POST /api/v1/admin/staff/
 }
 ```
 
-**Errors:** `400 VALIDATION_ERROR` — username taken, weak password (Django validators), duplicate `staff_code` in tenant, missing/ invalid `email` or `phone`.
+**Errors:** `400 VALIDATION_ERROR` — username taken, weak password (Django validators), duplicate `staff_code` in tenant, missing/ invalid `email` or `phone`. `503 CENTRAL_MASTER_UNAVAILABLE` / `422 CENTRAL_REGISTRATION_FAILED` — the central user master could not be reached / rejected the account; no staff row is created.
 
 > **Central user registration.** `email` and `phone` are required because the
 > staff member is also POSTed to the central user master
@@ -933,13 +950,15 @@ POST /api/v1/admin/staff/
 > and a POS staff account is a `USER` on its side.
 > The master enforces `username`, `email` and `phone_number` uniqueness **per
 > `client_id`**, so a second staff member cannot reuse a number already used in
-> the same tenant. The call runs after the local transaction commits: an outage
-> never blocks or rolls back the staff row — `central_user_registration.status`
-> reports `registered`, `skipped` (sync disabled) or `failed`, and the same
-> meanings apply as in §4.1. There is no staff-level retry endpoint yet: a
-> `failed` staff member is re-registered by running
-> `apps.platform_admin.views._register_central_user` for that membership (the
-> upstream master is idempotent per `client_id` + `username`).
+> the same tenant. The call runs **before** the local transaction: the user,
+> membership and profile are written only once the master succeeds, with the
+> central id stored on the membership. An outage returns
+> `503 CENTRAL_MASTER_UNAVAILABLE` and a rejection returns
+> `422 CENTRAL_REGISTRATION_FAILED`; neither creates a staff row. If the local
+> commit fails after the account was created, the new central account is deleted
+> again. `central_user_registration` therefore only reports `registered` or
+> `skipped` (sync disabled); failures use the error codes above, with the same
+> semantics as §4.1.
 
 #### Staff detail / update
 
@@ -949,6 +968,19 @@ PATCH /api/v1/admin/staff/1/
 ```
 
 **PATCH request:** `{ "display_name": "Ravi K.", "phone": "+911111111111" }`
+
+> **Central user update.** The editable values are also PATCHed to the linked
+> central account (`TenantMembership.central_user_id`): `display_name` becomes
+> `first_name` + `last_name`, `email` becomes `email`, and `phone` becomes
+> `phone_number`. Only the changed keys are sent — the master's PATCH is a
+> partial edit, so `username`, `password`, `user_role`, `status` and the seven
+> product flags are left as they are. A blank `email`/`phone` is not sent, and
+> `staff_code` has no central equivalent. The master call runs **before** the
+> local save: `503 CENTRAL_MASTER_UNAVAILABLE` (unreachable) or `422
+> CENTRAL_UPDATE_FAILED` (rejected, message carries the offending field) means
+> nothing was written locally. A staff member with no `central_user_id`, or with
+> `CENTRAL_USER_SYNC_ENABLED` off, is edited locally only, and an edit that
+> touches nothing central issues no call at all.
 
 #### Deactivate staff
 
@@ -1194,6 +1226,35 @@ POST /api/v1/admin/tickets/6f9619ff-8b86-d011-b42d-00c04fc964ff/reprint/
 ```
 
 > Reprints **never create a new ticket or sale** — they increment `reprint_count` and write an audit record.
+
+#### Manual (complimentary) ticket generation
+
+```
+POST /api/v1/admin/tickets/manual/
+Idempotency-Key: 0f6c1f9e-6d1a-4c2b-9a10-6f0f0f2f9c11   (or "idempotency_key" in the body)
+```
+
+Tenant admin only. Issues comp tickets without a POS sale. A real `Sale` row is
+created with `source = "manual"`, `gross_total = 0` and a `-M-` reference prefix,
+so revenue and transaction reports stay POS-only; the tickets themselves print,
+reprint and count exactly like POS tickets.
+
+```json
+{
+  "event": 1,
+  "staff": 3,
+  "items": [{ "category": 2, "quantity": 2 }]
+}
+```
+
+**Response `201 Created`:** a sale object (same shape as `/admin/sales/{id}/`) with
+`"source": "manual"`, `"gross_total": "0.00"` and the issued tickets nested under
+`"tickets"`. Replaying the same idempotency key returns the original sale with
+`"replayed": true` and creates no extra tickets.
+
+Errors: `EVENT_NOT_SELLABLE` (event not active), `STAFF_NOT_ASSIGNED`,
+`STAFF_INACTIVE`, `PRICE_UNAVAILABLE` (category has no active price),
+`CATEGORY_NOT_ALLOWED` (assignment restricts categories), `IDEMPOTENCY_CONFLICT`.
 
 #### Ticket print payload
 

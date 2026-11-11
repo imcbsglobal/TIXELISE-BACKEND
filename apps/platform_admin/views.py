@@ -10,7 +10,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.services import record_audit
-from apps.core.exceptions import NotFound, TixeliseAPIException
+from apps.core.exceptions import (
+    CentralMasterUnavailable,
+    CentralRegistrationRejected,
+    CentralUpdateRejected,
+    NotFound,
+    TixeliseAPIException,
+)
 from apps.core.permissions import IsPlatformAdmin
 from apps.tenancy.models import Tenant, TenantMembership
 from apps.tenancy.services import delete_tenant
@@ -274,23 +280,52 @@ def _central_request(method, url, payload=None, timeout=CENTRAL_TIMEOUT_SECONDS,
     return False, None, None, error
 
 
-def _central_user_payload(
-    tenant, user, password, role="ADMIN", phone=None, first_name=None, last_name=None
+def _central_user_body(
+    tenant_code,
+    *,
+    username,
+    email,
+    password,
+    role="ADMIN",
+    phone=None,
+    first_name=None,
+    last_name=None,
 ):
+    """The documented create payload, built from inputs instead of a ``User``.
+
+    Onboarding calls this before the local account exists, so nothing here can
+    depend on a saved model.
+    """
     return {
-        "client_id": tenant.code,
-        "first_name": first_name or user.first_name or user.username,
-        "last_name": last_name or user.last_name or "-",
-        "username": user.username,
+        "client_id": tenant_code,
+        "first_name": first_name or username,
+        "last_name": last_name or "-",
+        "username": username,
         "password": password,
-        "email": user.email,
+        "email": email,
         # Staff need their own number: the master enforces uniqueness per
         # client_id, so two accounts cannot share the tenant's phone.
-        "phone_number": phone or tenant.phone,
+        "phone_number": phone or "",
         "user_role": role,
         "status": "ACTIVE",
         **_PRODUCT_FLAGS,
     }
+
+
+def _central_user_payload(
+    tenant, user, password, role="ADMIN", phone=None, first_name=None, last_name=None
+):
+    """The same payload for an account that already exists locally."""
+    return _central_user_body(
+        tenant.code,
+        username=user.username,
+        email=user.email,
+        password=password,
+        role=role,
+        phone=phone or tenant.phone,
+        first_name=first_name or user.first_name,
+        last_name=last_name or user.last_name,
+    )
 
 
 def _find_central_user(client_id, username):
@@ -420,6 +455,113 @@ def _register_central_user(
     return {"status": "failed", "central_user_id": "", "detail": error}
 
 
+def create_central_user(
+    tenant_code,
+    *,
+    username,
+    email,
+    password,
+    role="ADMIN",
+    phone=None,
+    first_name=None,
+    last_name=None,
+    check_existing=True,
+    attempts=1,
+):
+    """Create an account in the central user master, or raise.
+
+    Runs before any local row exists, so the caller can make central success a
+    precondition for onboarding. Returns ``{status, central_user_id, detail}``
+    on success.
+
+    ``check_existing`` (default on) makes a retried onboarding idempotent: an
+    account that already exists for this client is adopted instead of posted
+    again, so a crash between the POST and the local commit is recoverable.
+    ``attempts`` defaults to one: the strict path must not add 40s of latency.
+
+    Raises ``CentralRegistrationRejected`` when the master answers 4xx and
+    ``CentralMasterUnavailable`` when it cannot be reached *or* when the new id
+    cannot be read back — an account Tixelise cannot link is not a success.
+    """
+    tenant_code = (tenant_code or "").strip()
+    username = (username or "").strip()
+    if not tenant_code or not username:
+        raise CentralRegistrationRejected(
+            "A tenant code and username are required to create the central user."
+        )
+    if not password:
+        raise CentralRegistrationRejected(
+            "A password is required to create the central user."
+        )
+
+    if check_existing:
+        existing, checked = _find_central_user(tenant_code, username)
+        if not checked:
+            # Posting blind here could create a second account for this admin.
+            raise CentralMasterUnavailable(
+                "Could not read the central user list, so no account was created."
+            )
+        if existing:
+            central_id = str(existing.get("id") or "")
+            if not central_id:
+                raise CentralMasterUnavailable(
+                    "The central master listed this username without an id."
+                )
+            return {
+                "status": "skipped",
+                "central_user_id": central_id,
+                "detail": "Central user already existed; link adopted.",
+            }
+
+    body = _central_user_body(
+        tenant_code,
+        username=username,
+        email=email,
+        password=password,
+        role=role,
+        phone=phone,
+        first_name=first_name,
+        last_name=last_name,
+    )
+    ok, status_code, _data, error = _central_request(
+        "POST", USER_MASTER_URL, body, attempts=attempts
+    )
+
+    if not ok:
+        # The write may have landed before the response was lost: never report
+        # a failure without looking, or a retry would be rejected as a
+        # duplicate of an account that does exist.
+        existing, checked = _find_central_user(tenant_code, username)
+        if checked and existing and str(existing.get("id") or ""):
+            return {
+                "status": "registered",
+                "central_user_id": str(existing["id"]),
+                "detail": "Registration confirmed after a failed response.",
+            }
+        if status_code is not None and 400 <= status_code < 500:
+            raise CentralRegistrationRejected(error)
+        raise CentralMasterUnavailable(error)
+
+    existing, checked = _find_central_user(tenant_code, username)
+    if checked and existing and str(existing.get("id") or ""):
+        return {
+            "status": "registered",
+            "central_user_id": str(existing["id"]),
+            "detail": "Registered in the central user master.",
+        }
+    raise CentralMasterUnavailable(
+        "The central master accepted the account but its id could not be read "
+        "back, so it was not linked to a local record."
+    )
+
+
+def _registration_failure(detail):
+    """Map a currency-master failure onto the strict-onboarding contract."""
+    if "unreachable" in (detail or "").lower():
+        return CentralMasterUnavailable(detail)
+    return CentralRegistrationRejected(detail)
+
+
 def _linked_central_user_ids(tenant):
     return [
         membership.central_user_id
@@ -477,6 +619,83 @@ def _delete_central_users(tenant_code, central_ids):
                 }
             )
     return results
+
+
+def update_central_user(
+    tenant_code, central_id, *, first_name=None, last_name=None, email=None, phone=None
+):
+    """Edit the linked account in the central user master, or raise.
+
+    Only the fields that actually changed are sent: the master documents PATCH
+    as a partial edit, so the product flags and any omitted value keep their
+    current state. Nothing about the local rows is decided here — the caller
+    runs this before committing, so a master failure leaves them untouched.
+
+    Raises ``CentralRegistrationRejected``'s sibling ``CentralUpdateRejected``
+    when the master answers 4xx and ``CentralMasterUnavailable`` when it cannot
+    be read or written at all. A record that no longer exists, or that belongs
+    to another client, is reported as ``gone``/``skipped`` instead of raising,
+    so removing it centrally must never block an otherwise valid local edit.
+    """
+    central_id = str(central_id or "").strip()
+    if not central_id:
+        return {
+            "status": "skipped",
+            "central_user_id": "",
+            "detail": "No central account is linked.",
+        }
+
+    body = {}
+    if first_name is not None:
+        body["first_name"] = first_name
+    if last_name is not None:
+        body["last_name"] = last_name
+    if email is not None:
+        body["email"] = email
+    if phone is not None:
+        body["phone_number"] = phone
+    if not body:
+        return {
+            "status": "skipped",
+            "central_user_id": central_id,
+            "detail": "Nothing to update.",
+        }
+
+    url = f"{USER_MASTER_URL}{central_id}/"
+    ok, status_code, record, error = _central_request("GET", url)
+    if status_code == 404:
+        return {
+            "status": "gone",
+            "central_user_id": central_id,
+            "detail": "The central account no longer exists.",
+        }
+    if not ok or not isinstance(record, dict):
+        raise CentralMasterUnavailable(
+            error or "The central account could not be read, so nothing was saved."
+        )
+
+    # Never write by a stored id alone: a stale or mistyped id would edit
+    # another client's account.
+    expected_client = (tenant_code or "").strip().upper()
+    belongs = (record.get("client_id") or "").strip().upper() == expected_client
+    if not belongs or not record.get("tixelise"):
+        return {
+            "status": "skipped",
+            "central_user_id": central_id,
+            "detail": "Record does not belong to this tenant.",
+        }
+
+    ok, status_code, _data, error = _central_request("PATCH", url, body, attempts=1)
+    if not ok:
+        if status_code is not None and 400 <= status_code < 500:
+            raise CentralUpdateRejected(error)
+        raise CentralMasterUnavailable(error)
+
+    return {
+        "status": "updated",
+        "central_user_id": central_id,
+        "detail": "Central account updated.",
+    }
 
 
 class TenantCurrencyOptionsView(APIView):
@@ -538,42 +757,70 @@ class TenantListCreateView(generics.ListCreateAPIView):
             return TenantCreateSerializer
         return TenantSerializer
 
-    def perform_create(self, serializer):
-        admin_username = serializer.validated_data.get("admin_username")
-        tenant = serializer.save()
-        record_audit(
-            actor=self.request.user,
-            tenant=None,
-            action="platform.tenant.created",
-            target_type="tenant",
-            target_id=tenant.id,
-            metadata={"code": tenant.code, "name": tenant.name, "admin": admin_username},
-        )
-
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         # Read these before save(): the serializer pops them off validated_data.
         admin_username = serializer.validated_data.get("admin_username")
         admin_password = serializer.validated_data.get("admin_password")
-        self.perform_create(serializer)
-        tenant = serializer.instance
-        membership = (
-            tenant.memberships.select_related("user")
-            .filter(user__username=admin_username)
-            .first()
-        )
+        tenant_code = (serializer.validated_data.get("code") or "").strip()
+        currency_code = serializer.validated_data.get("currency") or ""
 
-        # The tenant already exists at this point, so the central registrations
-        # are attempted outside the create transaction and reported, not
-        # enforced. A third-party outage must never block onboarding.
+        # Fail-closed: nothing is written locally unless the central master
+        # succeeds. The calls run before the transaction on purpose — a 20s
+        # third-party timeout must never hold the database write lock.
         if getattr(settings, "CENTRAL_CURRENCY_SYNC_ENABLED", True):
-            registration = _register_tenant_currency(tenant.code, tenant.currency)
+            registration = _register_tenant_currency(tenant_code, currency_code)
+            if registration["status"] == "failed":
+                raise _registration_failure(registration["detail"])
         else:
             registration = {
                 "status": "skipped",
                 "detail": "Central currency sync is disabled.",
             }
+
+        if getattr(settings, "CENTRAL_USER_SYNC_ENABLED", True):
+            central_user = create_central_user(
+                tenant_code,
+                username=admin_username,
+                email=serializer.validated_data.get("admin_email") or "",
+                password=admin_password,
+                role="ADMIN",
+                phone=serializer.validated_data.get("phone") or "",
+                first_name=serializer.validated_data.get("admin_first_name") or "",
+                last_name=serializer.validated_data.get("admin_last_name") or "",
+            )
+        else:
+            central_user = {
+                "status": "skipped",
+                "central_user_id": "",
+                "detail": "Central user sync is disabled.",
+            }
+
+        try:
+            tenant = serializer.save(central_user_id=central_user["central_user_id"])
+            # The local rows are only written now, with the link already set, so
+            # a tenant can never be created without its central account.
+            record_audit(
+                actor=request.user,
+                tenant=None,
+                action="platform.tenant.created",
+                target_type="tenant",
+                target_id=tenant.id,
+                metadata={
+                    "code": tenant.code,
+                    "name": tenant.name,
+                    "admin": admin_username,
+                },
+            )
+        except Exception:
+            # The master already holds an account this request created, so drop
+            # it: a failed local commit must not leave a half-onboarded tenant.
+            # An adopted row (`skipped`) predates this request and is left alone.
+            if central_user["status"] == "registered" and central_user["central_user_id"]:
+                _delete_central_users(tenant_code, [central_user["central_user_id"]])
+            raise
+
         record_audit(
             actor=request.user,
             tenant=None,
@@ -587,21 +834,6 @@ class TenantListCreateView(generics.ListCreateAPIView):
                 "detail": registration["detail"],
             },
         )
-
-        if membership is None:
-            central_user = {
-                "status": "failed",
-                "central_user_id": "",
-                "detail": "Tenant admin membership not found.",
-            }
-        elif getattr(settings, "CENTRAL_USER_SYNC_ENABLED", True):
-            central_user = _register_central_user(tenant, membership, admin_password)
-        else:
-            central_user = {
-                "status": "skipped",
-                "central_user_id": "",
-                "detail": "Central user sync is disabled.",
-            }
         record_audit(
             actor=request.user,
             tenant=None,

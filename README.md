@@ -139,6 +139,11 @@ enforced by database constraints, not application checks.
   echoed in `X-Correlation-ID` and stored on audit records.
 - Audit log covers login, tenant/staff/event/price/assignment changes, sales,
   reprints and company-master writes; never records passwords or tokens.
+- Tenant and staff onboarding is **fail-closed**: the central currency/user
+  master is called first, and no local row is written unless both succeed
+  (`503 CENTRAL_MASTER_UNAVAILABLE` / `422 CENTRAL_REGISTRATION_FAILED`). Set
+  `CENTRAL_USER_SYNC_ENABLED`/`CENTRAL_CURRENCY_SYNC_ENABLED=false` to create
+  records locally only, as tests and offline development do.
 
 ## Project layout
 

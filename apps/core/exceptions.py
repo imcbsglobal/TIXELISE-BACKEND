@@ -136,6 +136,30 @@ class NotImplementedYet(TixeliseAPIException):
     default_detail = "This endpoint is not implemented yet."
 
 
+class CentralMasterUnavailable(TixeliseAPIException):
+    """The master could not be reached, so onboarding failed closed."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_code = "CENTRAL_MASTER_UNAVAILABLE"
+    default_detail = "The central master is unreachable, so nothing was saved."
+
+
+class CentralRegistrationRejected(TixeliseAPIException):
+    """The master answered but refused the record (e.g. an unknown client)."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    default_code = "CENTRAL_REGISTRATION_FAILED"
+    default_detail = "The central master rejected the registration, so nothing was saved."
+
+
+class CentralUpdateRejected(TixeliseAPIException):
+    """The master answered but refused an edit to an existing account."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    default_code = "CENTRAL_UPDATE_FAILED"
+    default_detail = "The central master rejected the update, so nothing was saved."
+
+
 # ---------------------------------------------------------------------------
 # Serializes every error into the contract from MD §10.1:
 # {"error": {"code": "...", "message": "..."}}

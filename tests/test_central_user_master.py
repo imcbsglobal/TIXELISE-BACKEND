@@ -5,8 +5,9 @@ from unittest import mock
 from urllib.error import HTTPError, URLError
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APITestCase
 
 from apps.platform_admin import views
 from apps.staff.models import StaffProfile
@@ -64,8 +65,10 @@ class FakeOpener:
         post_error=None,
         post_failures=0,
         store_created=True,
+        currency_rows=None,
     ):
         self.existing = list(existing) if existing is not None else []
+        self.currency_rows = [] if currency_rows is None else list(currency_rows)
         self.created_id = created_id
         self.record = record or {}
         self.detail_status = detail_status
@@ -100,6 +103,8 @@ class FakeOpener:
         self.requests.append({"method": method, "url": request.full_url, "body": body})
         if method == "GET" and request.full_url == USER_MASTER:
             return FakeResponse(self.existing)
+        if method == "GET" and request.full_url == views.CURRENCY_MASTER_URL:
+            return FakeResponse(self.currency_rows)
         if method == "GET":
             missing = self.detail_status == 404
             return FakeResponse(None if missing else self.record, status=self.detail_status)
@@ -130,6 +135,13 @@ class FakeOpener:
 
     def body_of(self, method):
         return [call["body"] for call in self.requests if call["method"] == method][0]
+
+    def posts_for(self, url):
+        return [
+            call["body"]
+            for call in self.requests
+            if call["method"] == "POST" and call["url"] == url
+        ]
 
 
 class CentralUserRegistrationTests(TestCase):
@@ -433,16 +445,53 @@ class StaffCentralRegistrationTests(APITestBase):
         )
         self.assertEqual(membership.central_user_id, "77")
 
-    def test_an_outage_does_not_block_staff_creation(self):
+    def test_an_outage_creates_no_staff_member(self):
         self.login_admin_a()
-        with fake_network(FakeOpener(down=True)):
+        opener = FakeOpener(down=True)
+        with fake_network(opener):
             response = self._create()
 
-        self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(response.data["central_user_registration"]["status"], "failed")
-        self.assertTrue(
+        self.assertEqual(response.status_code, 503, response.content)
+        self.assertEqual(response.data["error"]["code"], "CENTRAL_MASTER_UNAVAILABLE")
+        self.assertFalse(
             StaffProfile.objects.filter(tenant=self.tenant_a, staff_code="ST900").exists()
         )
+        self.assertFalse(User.objects.filter(username="anita").exists())
+        self.assertFalse(
+            TenantMembership.objects.filter(
+                tenant=self.tenant_a, user__username="anita"
+            ).exists()
+        )
+
+    def test_a_rejected_registration_creates_no_staff_member(self):
+        self.login_admin_a()
+        opener = FakeOpener(
+            post_status=400,
+            post_body={"phone_number": ["violates the unique constraint."]},
+            store_created=False,
+        )
+        with fake_network(opener):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 422, response.content)
+        self.assertEqual(response.data["error"]["code"], "CENTRAL_REGISTRATION_FAILED")
+        self.assertIn("phone_number", response.data["error"]["message"])
+        self.assertFalse(User.objects.filter(username="anita").exists())
+
+    def test_a_failed_local_save_removes_the_new_central_account(self):
+        self.login_admin_a()
+        opener = FakeOpener(
+            existing=[], created_id=79, record={"id": 79, "client_id": "AAAA", "tixelise": True}
+        )
+        with fake_network(opener), mock.patch(
+            "apps.staff.serializers.StaffProfile.objects.create",
+            side_effect=IntegrityError("duplicate staff code"),
+        ):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 500, response.content)
+        self.assertFalse(User.objects.filter(username="anita").exists())
+        self.assertIn("DELETE", opener.methods())
 
     def test_email_and_phone_are_required(self):
         self.login_admin_a()
@@ -456,3 +505,128 @@ class StaffCentralRegistrationTests(APITestBase):
         self.assertIn("phone", message)
         # Nothing reaches the master when the local row was never written.
         self.assertEqual(opener.requests, [])
+
+
+class TenantOnboardingBase(APITestCase):
+    """A platform admin creating a tenant through the fail-closed path."""
+
+    def setUp(self):
+        self.platform = User.objects.create_user(
+            username="plat", password="PlatPass123!", is_platform_admin=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.platform)
+
+    def _payload(self, **overrides):
+        payload = {
+            "code": "NEWT01",
+            "name": "New Tenant",
+            "timezone": "UTC",
+            "currency": "INR",
+            "phone": "9876500000",
+            "admin_username": "newadmin",
+            "admin_password": "AdminPass123!",
+            "admin_email": "newadmin@example.com",
+            "admin_first_name": "New",
+            "admin_last_name": "Admin",
+        }
+        payload.update(overrides)
+        return payload
+
+    def _currency_rows(self):
+        return [{"client_id": "NEWT01", "code": "INR", "status": "ACTIVE"}]
+
+    def _create(self, **overrides):
+        return self.client.post(
+            "/api/v1/platform/tenants/", self._payload(**overrides), format="json"
+        )
+
+
+@override_settings(CENTRAL_USER_SYNC_ENABLED=True, CENTRAL_CURRENCY_SYNC_ENABLED=True)
+class TenantOnboardingTests(TenantOnboardingBase):
+    def test_creates_the_tenant_only_after_the_master_succeeds(self):
+        opener = FakeOpener(existing=[], created_id=91)
+        with fake_network(opener):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data["central_user_registration"]["central_user_id"], "91")
+        tenant = Tenant.objects.get(code="NEWT01")
+        membership = TenantMembership.objects.get(tenant=tenant, user__username="newadmin")
+        self.assertEqual(membership.central_user_id, "91")
+        posted = opener.posts_for(views.USER_MASTER_URL)[0]
+        self.assertEqual(posted["client_id"], "NEWT01")
+        self.assertEqual(posted["user_role"], "ADMIN")
+        self.assertEqual(posted["phone_number"], "9876500000")
+
+    def test_an_outage_creates_nothing(self):
+        with fake_network(FakeOpener(down=True)):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 503, response.content)
+        self.assertEqual(response.data["error"]["code"], "CENTRAL_MASTER_UNAVAILABLE")
+        self.assertFalse(Tenant.objects.filter(code="NEWT01").exists())
+        self.assertFalse(User.objects.filter(username="newadmin").exists())
+
+    def test_a_rejected_registration_creates_nothing(self):
+        opener = FakeOpener(
+            existing=[],
+            currency_rows=self._currency_rows(),
+            post_status=400,
+            post_body={"client_id": ["Unknown client_id."]},
+            store_created=False,
+        )
+        with fake_network(opener):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 422, response.content)
+        self.assertEqual(response.data["error"]["code"], "CENTRAL_REGISTRATION_FAILED")
+        self.assertIn("Unknown client_id", response.data["error"]["message"])
+        self.assertFalse(Tenant.objects.filter(code="NEWT01").exists())
+        self.assertFalse(User.objects.filter(username="newadmin").exists())
+
+    def test_a_failed_local_save_removes_the_new_central_account(self):
+        opener = FakeOpener(
+            existing=[],
+            created_id=93,
+            record={"id": 93, "client_id": "NEWT01", "tixelise": True},
+        )
+        with fake_network(opener), mock.patch(
+            "apps.platform_admin.serializers.Tenant.objects.create",
+            side_effect=IntegrityError("duplicate code"),
+        ):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 500, response.content)
+        self.assertFalse(Tenant.objects.filter(code="NEWT01").exists())
+        self.assertIn("DELETE", opener.methods())
+
+    def test_adopts_an_existing_central_account_instead_of_posting_twice(self):
+        opener = FakeOpener(
+            existing=[{"id": 8, "client_id": "NEWT01", "username": "newadmin"}],
+            currency_rows=self._currency_rows(),
+        )
+        with fake_network(opener):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(opener.posts_for(views.USER_MASTER_URL), [])
+        membership = TenantMembership.objects.get(
+            tenant__code="NEWT01", user__username="newadmin"
+        )
+        self.assertEqual(membership.central_user_id, "8")
+
+
+@override_settings(CENTRAL_USER_SYNC_ENABLED=False, CENTRAL_CURRENCY_SYNC_ENABLED=False)
+class TenantOnboardingWithSyncDisabledTests(TenantOnboardingBase):
+    def test_creates_locally_without_touching_the_master(self):
+        opener = FakeOpener()
+        with fake_network(opener):
+            response = self._create()
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(opener.requests, [])
+        membership = TenantMembership.objects.get(
+            tenant__code="NEWT01", user__username="newadmin"
+        )
+        self.assertEqual(membership.central_user_id, "")

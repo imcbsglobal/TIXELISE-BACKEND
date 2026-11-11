@@ -292,3 +292,194 @@ def create_sale(*, tenant, user, staff, event_id, items_data, idempotency_key):
         detail="Could not complete the sale due to a conflict. Please retry.",
         code="SALE_CONFLICT",
     )
+
+
+
+def _load_manual_staff(tenant, staff_id) -> StaffProfile:
+    try:
+        staff = StaffProfile.objects.get(pk=staff_id, tenant_id=tenant.id)
+    except StaffProfile.DoesNotExist:
+        raise NotFound("Staff member not found.")
+    if staff.status != StaffProfile.Status.ACTIVE:
+        raise BadRequest(detail="This staff member is inactive.", code="STAFF_INACTIVE")
+    return staff
+
+
+def _manual_assignment(tenant, staff, event):
+    assignment = (
+        StaffEventAssignment.objects.filter(
+            tenant_id=tenant.id, staff=staff, event=event
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if assignment is None or assignment.status != StaffEventAssignment.Status.ACTIVE:
+        raise BadRequest(
+            detail="This staff member is not assigned to the event.",
+            code="STAFF_NOT_ASSIGNED",
+        )
+    return assignment
+
+
+def _snapshot_prices(tenant, event, categories, quantities):
+    """List prices for the record only; comps never charge, so no window check."""
+    priced = []
+    for category, quantity in zip(categories, quantities):
+        try:
+            price = EventPrice.objects.get(
+                tenant=tenant,
+                event=event,
+                category=category,
+                status=EventPrice.Status.ACTIVE,
+            )
+        except EventPrice.DoesNotExist:
+            raise PriceUnavailable()
+        priced.append((category, quantity, price.amount))
+    return priced
+
+
+def issue_manual_tickets(
+    *, tenant, user, staff_id, event_id, items_data, idempotency_key
+):
+    """
+    Complimentary tickets issued by an admin.
+
+    Still a real Sale + Ticket pair -- Ticket.sale is non-null -- but tagged
+    source=manual with a zero gross, so POS revenue and transaction counts are
+    unaffected. Sequence numbers come from the shared per-event counter, so
+    comp codes interleave with POS codes and never collide.
+    """
+    if not idempotency_key or len(idempotency_key) > 128:
+        raise BadRequest(
+            detail="A valid Idempotency-Key header (max 128 chars) is required.",
+            code="IDEMPOTENCY_KEY_REQUIRED",
+        )
+
+    event = _load_event(tenant.id, event_id)
+    if event.status != Event.Status.ACTIVE:
+        raise EventNotSellable(f"Event is {event.status}.")
+    if items_data is None or len(items_data) == 0:
+        raise BadRequest(detail="At least one item is required.", code="EMPTY_SALE")
+
+    staff = _load_manual_staff(tenant, staff_id)
+    assignment = _manual_assignment(tenant, staff, event)
+
+    categories = _load_categories(tenant, items_data)
+    if assignment.restrict_categories:
+        allowed_ids = set(assignment.allowed_categories.values_list("id", flat=True))
+        for category in categories:
+            if category.id not in allowed_ids:
+                raise CategoryNotAllowed(
+                    "This ticket category is not allowed for this staff member."
+                )
+    quantities = [item["quantity"] for item in items_data]
+    priced_items = _snapshot_prices(tenant, event, categories, quantities)
+
+    fingerprint = request_fingerprint(
+        {
+            "event": event.id,
+            "staff": staff.id,
+            "items": items_data,
+            "source": Sale.Source.MANUAL,
+        }
+    )
+
+    replay = _check_idempotency(tenant, user, idempotency_key, fingerprint)
+    if replay is not None:
+        sale = replay.sale
+        return {
+            "sale": sale,
+            "tickets": list(sale.tickets.select_related("category", "event", "staff")),
+            "replayed": True,
+        }
+
+    total_tickets = sum(quantity for _, quantity, _ in priced_items)
+    zero = Decimal("0.00")
+    now = timezone.now()
+
+    max_attempts = 6
+    for attempt in range(max_attempts):
+        try:
+            with transaction.atomic():
+                sequence_numbers = _allocate_sequence(tenant, event, total_tickets)
+
+                sale = Sale.objects.create(
+                    tenant=tenant,
+                    event=event,
+                    staff=staff,
+                    sale_reference=f"{tenant.code}-M-{secrets.token_hex(4).upper()}",
+                    gross_total=zero,
+                    refund_total=zero,
+                    currency=tenant.currency,
+                    created_by=user,
+                    status=Sale.Status.COMPLETED,
+                    source=Sale.Source.MANUAL,
+                )
+
+                tickets = []
+                seq_iter = iter(sequence_numbers)
+                for category, quantity, unit_price in priced_items:
+                    SaleItem.objects.create(
+                        sale=sale,
+                        category=category,
+                        quantity=quantity,
+                        unit_price_snapshot=unit_price,
+                        line_total=zero,
+                    )
+                    for _ in range(quantity):
+                        seq = next(seq_iter)
+                        code = build_ticket_code(tenant, staff, event, now, seq)
+                        tickets.append(
+                            Ticket.objects.create(
+                                tenant=tenant,
+                                ticket_code=code,
+                                event=event,
+                                staff=staff,
+                                sale=sale,
+                                category=category,
+                                sequence_number=seq,
+                                status=Ticket.Status.ISSUED,
+                            )
+                        )
+
+                IdempotencyRecord.objects.create(
+                    tenant=tenant,
+                    actor=user,
+                    idempotency_key=idempotency_key,
+                    request_hash=fingerprint,
+                    sale=sale,
+                    status=IdempotencyRecord.Status.COMPLETED,
+                    expires_at=now + timedelta(days=IDEMPOTENCY_TTL_DAYS),
+                )
+
+                record_audit(
+                    actor=user,
+                    tenant=tenant,
+                    action="tickets.manual_issued",
+                    target_type="sale",
+                    target_id=sale.id,
+                    metadata={
+                        "sale_reference": sale.sale_reference,
+                        "event": event.code,
+                        "staff": staff.staff_code,
+                        "tickets": len(tickets),
+                        "categories": [c.code for c, _, _ in priced_items],
+                        "codes": [t.ticket_code for t in tickets],
+                    },
+                )
+
+                return {"sale": sale, "tickets": tickets, "replayed": False}
+        except (IntegrityError, OperationalError) as exc:
+            if not _is_transient(exc):
+                raise
+            if attempt == max_attempts - 1:
+                break
+            import time
+
+            time.sleep(0.05 * (2**attempt))
+            continue
+
+    raise BadRequest(
+        detail="Could not issue the tickets due to a conflict. Please retry.",
+        code="SALE_CONFLICT",
+    )

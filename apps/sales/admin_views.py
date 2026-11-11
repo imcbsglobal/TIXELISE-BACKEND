@@ -35,6 +35,8 @@ class AdminSaleListView(generics.ListAPIView):
             qs = qs.filter(staff_id=params["staff"])
         if params.get("status"):
             qs = qs.filter(status=params["status"])
+        if params.get("source"):
+            qs = qs.filter(source=params["source"])
         if params.get("sale_reference"):
             qs = qs.filter(sale_reference=params["sale_reference"])
         if params.get("date_from"):

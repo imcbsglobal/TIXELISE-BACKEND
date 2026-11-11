@@ -52,6 +52,7 @@ class SaleSerializer(serializers.ModelSerializer):
             "staff_code",
             "staff_name",
             "status",
+            "source",
             "gross_total",
             "refund_total",
             "currency",
