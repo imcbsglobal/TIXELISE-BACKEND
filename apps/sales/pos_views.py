@@ -10,6 +10,7 @@ from apps.core.exceptions import Forbidden, NotFound
 from apps.core.permissions import IsPOSSStaff
 from apps.events.models import Event
 from apps.staff.models import StaffProfile
+from apps.taxation.services import apply_tax_to_line, resolve_tax
 from apps.ticketing.models import Ticket
 
 from .serializers import SaleCreateSerializer, SaleSerializer
@@ -82,18 +83,29 @@ class POSCategoryListView(APIView):
             allowed = assignment.allowed_categories.values_list("id", flat=True)
             prices = prices.filter(category_id__in=allowed)
 
-        return Response(
-            [
+        # The terminal shows price + tax, so it needs the rate too. Read from the
+        # stored setting (no network call) exactly like a sale does.
+        tax = resolve_tax(request.tenant_obj)
+        rows = []
+        for p in prices:
+            net, tax_amount = apply_tax_to_line(
+                unit_price=p.amount, quantity=1, tax=tax
+            )
+            rows.append(
                 {
                     "category": p.category.id,
                     "code": p.category.code,
                     "name": p.category.name,
                     "price": str(p.amount),
                     "currency": p.currency,
+                    "tax_rate": str(tax.rate) if tax else "0.00",
+                    "tax_code": tax.code if tax else "",
+                    "tax_included": bool(tax.prices_include_tax) if tax else False,
+                    "tax_amount": str(tax_amount),
+                    "price_with_tax": str(net + tax_amount),
                 }
-                for p in prices
-            ]
-        )
+            )
+        return Response(rows)
 
 
 class POSSaleCreateView(APIView):

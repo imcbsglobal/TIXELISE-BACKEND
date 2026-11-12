@@ -11,6 +11,8 @@ urlpatterns = [
     path("api/v1/admin/", include("apps.assignments.urls")),
     path("api/v1/admin/", include("apps.ticketing.urls")),
     path("api/v1/admin/", include("apps.sales.admin_urls")),
+    path("api/v1/admin/", include("apps.taxation.urls")),
+    path("api/v1/admin/", include("apps.developer.urls")),
     path("api/v1/admin/", include("apps.audit.urls")),
     path("api/v1/admin/", include("apps.reporting.urls")),
     # Central company master pass-through; see apps.platform_admin.company_master.

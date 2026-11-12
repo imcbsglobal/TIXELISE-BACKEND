@@ -154,6 +154,22 @@ class TicketPrintView(APIView):
         tz = ZoneInfo(ticket.tenant.timezone or "UTC")
         local = timezone.localtime(ticket.issued_at, tz)
 
+        # A sale holds at most one item per category, so a ticket's money is
+        # unambiguous. Read from the sale line's own snapshot, never the live
+        # price or tax setting: a reprint must match the original ticket.
+        item = ticket.sale.items.filter(category_id=ticket.category_id).first()
+        price_fields = {
+            "currency": ticket.sale.currency,
+            "unit_price": str(item.unit_price_snapshot) if item else None,
+            "quantity": item.quantity if item else None,
+            "line_total": str(item.line_total) if item else None,
+            "tax_rate": str(item.tax_rate_snapshot) if item else "0.00",
+            "tax_code": item.tax_code if item else "",
+            "tax_name": item.tax_name if item else "",
+            "tax_amount": str(item.tax_amount) if item else "0.00",
+            "total": str(item.line_total + item.tax_amount) if item else None,
+        }
+
         return Response(
             {
                 "ticket": {
@@ -172,6 +188,7 @@ class TicketPrintView(APIView):
                     "category": ticket.category.name,
                     "staff_code": ticket.staff.staff_code,
                     "sale_reference": ticket.sale.sale_reference,
+                    **price_fields,
                 },
                 "print": print_profile(ticket.tenant),
             }

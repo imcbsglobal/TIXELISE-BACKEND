@@ -115,9 +115,11 @@ class StaffSalesDetailView(APIView):
             transactions=Count("id"),
             gross=Sum("gross_total"),
             refunds=Sum("refund_total"),
+            tax=Sum("tax_total"),
         )
         gross = summary["gross"] or Decimal("0.00")
         refunds = summary["refunds"] or Decimal("0.00")
+        tax = summary["tax"] or Decimal("0.00")
 
         rows = (
             sales.select_related("event", "staff")
@@ -156,8 +158,12 @@ class StaffSalesDetailView(APIView):
                         for item in sale.items.all()
                     ],
                     "gross_total": _money(sale.gross_total),
+                    "tax_total": _money(sale.tax_total),
                     "refund_total": _money(sale.refund_total),
                     "net_total": _money(sale.gross_total - sale.refund_total),
+                    "total_payable": _money(
+                        sale.gross_total + sale.tax_total - sale.refund_total
+                    ),
                 }
             )
 
@@ -178,6 +184,8 @@ class StaffSalesDetailView(APIView):
                     "amount": _money(gross),
                     "refunds": _money(refunds),
                     "net": _money(gross - refunds),
+                    "tax": _money(tax),
+                    "total": _money(gross + tax - refunds),
                 },
                 "sales": sales_payload,
             }

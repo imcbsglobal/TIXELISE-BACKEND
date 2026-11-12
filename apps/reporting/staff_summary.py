@@ -79,7 +79,11 @@ class StaffSalesSummaryView(APIView):
                 source=Sale.Source.POS,
             )
             .values("staff_id")
-            .annotate(transactions=Count("id"), amount=Sum("gross_total"))
+            .annotate(
+                transactions=Count("id"),
+                amount=Sum("gross_total"),
+                tax=Sum("tax_total"),
+            )
         }
         ticket_rows = {
             row["staff_id"]: row["tickets"]
@@ -104,6 +108,8 @@ class StaffSalesSummaryView(APIView):
         staff = []
         for member in roster.values("id", "staff_code", "display_name"):
             rollup = sale_rows.get(member["id"], {})
+            amount = rollup.get("amount") or None
+            tax = rollup.get("tax") or Decimal("0.00")
             staff.append(
                 {
                     "staff_id": member["id"],
@@ -111,7 +117,9 @@ class StaffSalesSummaryView(APIView):
                     "display_name": member["display_name"],
                     "tickets": ticket_rows.get(member["id"], 0),
                     "transactions": rollup.get("transactions", 0),
-                    "amount": _money(rollup.get("amount")),
+                    "amount": _money(amount),
+                    "tax": _money(tax),
+                    "total": _money((amount or Decimal("0.00")) + tax),
                 }
             )
 
@@ -129,6 +137,12 @@ class StaffSalesSummaryView(APIView):
                     "transactions": sum(row["transactions"] for row in staff),
                     "amount": _money(
                         sum((Decimal(row["amount"]) for row in staff), Decimal("0.00"))
+                    ),
+                    "tax": _money(
+                        sum((Decimal(row["tax"]) for row in staff), Decimal("0.00"))
+                    ),
+                    "total": _money(
+                        sum((Decimal(row["total"]) for row in staff), Decimal("0.00"))
                     ),
                 },
                 "staff": staff,

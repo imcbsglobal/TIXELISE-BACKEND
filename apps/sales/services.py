@@ -30,6 +30,7 @@ from apps.core.exceptions import (
 )
 from apps.events.models import Event
 from apps.staff.models import StaffProfile
+from apps.taxation.services import apply_tax_to_line, resolve_tax
 from apps.ticketing.models import Ticket, TicketSequence
 
 from .models import IdempotencyRecord, Sale, SaleItem
@@ -197,8 +198,21 @@ def create_sale(*, tenant, user, staff, event_id, items_data, idempotency_key):
             "replayed": True,
         }
 
-    total_tickets = sum(q for _, q, _ in priced_items)
-    gross_total = sum((price * q for _, q, price in priced_items), Decimal("0.00"))
+    # Tax is resolved once, from the locally stored setting - never from the
+    # central master - so committing a sale cannot depend on a third party.
+    tax = resolve_tax(tenant)
+    lines = [
+        (
+            category,
+            quantity,
+            unit_price,
+            *apply_tax_to_line(unit_price=unit_price, quantity=quantity, tax=tax),
+        )
+        for category, quantity, unit_price in priced_items
+    ]
+    total_tickets = sum(quantity for _, quantity, _, _, _ in lines)
+    gross_total = sum((line[3] for line in lines), Decimal("0.00"))
+    tax_total = sum((line[4] for line in lines), Decimal("0.00"))
     now = timezone.now()
 
     max_attempts = 6
@@ -215,6 +229,7 @@ def create_sale(*, tenant, user, staff, event_id, items_data, idempotency_key):
                         f"{tenant.code}-S-{secrets.token_hex(4).upper()}"
                     ),
                     gross_total=gross_total,
+                    tax_total=tax_total,
                     currency=tenant.currency,
                     created_by=user,
                     status=Sale.Status.COMPLETED,
@@ -222,14 +237,17 @@ def create_sale(*, tenant, user, staff, event_id, items_data, idempotency_key):
 
                 tickets = []
                 seq_iter = iter(sequence_numbers)
-                for category, quantity, unit_price in priced_items:
-                    line_total = unit_price * quantity
+                for category, quantity, unit_price, line_total, tax_amount in lines:
                     SaleItem.objects.create(
                         sale=sale,
                         category=category,
                         quantity=quantity,
                         unit_price_snapshot=unit_price,
                         line_total=line_total,
+                        tax_rate_snapshot=tax.rate if tax else Decimal("0.00"),
+                        tax_code=tax.code if tax else "",
+                        tax_name=tax.name if tax else "",
+                        tax_amount=tax_amount,
                     )
                     for _ in range(quantity):
                         seq = next(seq_iter)
@@ -269,6 +287,7 @@ def create_sale(*, tenant, user, staff, event_id, items_data, idempotency_key):
                         "staff": staff.staff_code,
                         "tickets": len(tickets),
                         "gross_total": str(gross_total),
+                        "tax_total": str(tax_total),
                     },
                 )
 

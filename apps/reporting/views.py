@@ -44,10 +44,28 @@ def _sales_between(tenant, start, end):
 
 
 def _totals(sales_qs):
-    agg = sales_qs.aggregate(gross=Sum("gross_total"), refunds=Sum("refund_total"))
-    gross = (agg["gross"] or Decimal("0.00")).quantize(Decimal("0.01"))
-    refunds = (agg["refunds"] or Decimal("0.00")).quantize(Decimal("0.01"))
-    return gross, refunds, (gross - refunds).quantize(Decimal("0.01"))
+    """Money for a set of sales.
+
+    `gross` stays the taxable subtotal and `net` stays gross - refunds, so the
+    meaning of every existing key is unchanged. `tax` is what was collected on
+    top and `total` is what the customer actually paid. All three of the new
+    values are zero on sales created before tax existed, which is why `total`
+    equals `net` for them.
+    """
+    agg = sales_qs.aggregate(
+        gross=Sum("gross_total"), refunds=Sum("refund_total"), tax=Sum("tax_total")
+    )
+    cents = Decimal("0.01")
+    gross = (agg["gross"] or Decimal("0.00")).quantize(cents)
+    refunds = (agg["refunds"] or Decimal("0.00")).quantize(cents)
+    tax = (agg["tax"] or Decimal("0.00")).quantize(cents)
+    return {
+        "gross": gross,
+        "refunds": refunds,
+        "tax": tax,
+        "net": (gross - refunds).quantize(cents),
+        "total": (gross + tax - refunds).quantize(cents),
+    }
 
 
 class DashboardView(APIView):
@@ -59,7 +77,7 @@ class DashboardView(APIView):
         start, end = _day_bounds(tenant, today)
 
         sales = _sales_between(tenant, start, end)
-        gross, refunds, net = _totals(sales)
+        totals = _totals(sales)
 
         tickets_today = Ticket.objects.filter(
             tenant=tenant, issued_at__gte=start, issued_at__lt=end
@@ -75,9 +93,11 @@ class DashboardView(APIView):
                 "timezone": tenant.timezone,
                 "tickets_sold_today": tickets_today,
                 "completed_sales_today": sales.count(),
-                "gross_sales_today": str(gross),
-                "refunds_today": str(refunds),
-                "net_sales_today": str(net),
+                "gross_sales_today": str(totals["gross"]),
+                "refunds_today": str(totals["refunds"]),
+                "net_sales_today": str(totals["net"]),
+                "tax_sales_today": str(totals["tax"]),
+                "total_sales_today": str(totals["total"]),
                 "active_events": Event.objects.filter(
                     tenant=tenant, status=Event.Status.ACTIVE
                 ).count(),
@@ -147,12 +167,10 @@ class DailyReportView(APIView):
                 start_day = end_day = _tenant_now(tenant).date()
             start, end = _day_bounds(tenant, start_day)
         sales = _sales_between(tenant, start, end)
-        gross, refunds, net = _totals(sales)
+        totals = _totals(sales)
 
         today_start, today_end = _day_bounds(tenant, _tenant_now(tenant).date())
-        sales_today, _refunds_today, _net_today = _totals(
-            _sales_between(tenant, today_start, today_end)
-        )
+        totals_today = _totals(_sales_between(tenant, today_start, today_end))
 
         tickets = Ticket.objects.filter(
             tenant=tenant, issued_at__gte=start, issued_at__lt=end
@@ -177,9 +195,17 @@ class DailyReportView(APIView):
             row["event_id"]: (row["amount"] or Decimal("0.00")).quantize(cents)
             for row in sales.values("event_id").annotate(amount=Sum("gross_total"))
         }
+        event_taxes = {
+            row["event_id"]: (row["amount"] or Decimal("0.00")).quantize(cents)
+            for row in sales.values("event_id").annotate(amount=Sum("tax_total"))
+        }
         for row in by_event:
             row["event_code"] = code_map.get(row["event_id"], "")
-            row["amount"] = str(event_amounts.get(row["event_id"], Decimal("0.00")))
+            amount = event_amounts.get(row["event_id"], Decimal("0.00"))
+            event_tax = event_taxes.get(row["event_id"], Decimal("0.00"))
+            row["amount"] = str(amount)
+            row["tax"] = str(event_tax)
+            row["total"] = str((amount + event_tax).quantize(cents))
 
         by_category = [
             {"category_id": row["category_id"], "tickets": row["quantity"]}
@@ -211,10 +237,14 @@ class DailyReportView(APIView):
                 "timezone": tenant.timezone,
                 "tickets_sold": tickets.count(),
                 "transactions": sales.count(),
-                "gross_sales": str(gross),
-                "refunds": str(refunds),
-                "net_sales": str(net),
-                "sales_today": str(sales_today),
+                "gross_sales": str(totals["gross"]),
+                "refunds": str(totals["refunds"]),
+                "net_sales": str(totals["net"]),
+                "tax_sales": str(totals["tax"]),
+                "total_sales": str(totals["total"]),
+                "sales_today": str(totals_today["gross"]),
+                "tax_sales_today": str(totals_today["tax"]),
+                "total_sales_today": str(totals_today["total"]),
                 "by_event": by_event,
                 "by_category": by_category,
                 "by_staff": by_staff,
@@ -312,6 +342,7 @@ class StaffReportView(APIView):
                 voided=Count("id", filter=Q(status=Sale.Status.VOIDED)),
                 gross=Sum("gross_total"),
                 refunds=Sum("refund_total"),
+                tax=Sum("tax_total"),
                 last_sale_at=Max("created_at"),
             )
         }
@@ -333,6 +364,7 @@ class StaffReportView(APIView):
                 transactions=Count("id"),
                 gross=Sum("gross_total"),
                 refunds=Sum("refund_total"),
+                tax=Sum("tax_total"),
             )
             .order_by("event_id")
         ):
@@ -352,6 +384,7 @@ class StaffReportView(APIView):
             rollup = sale_rollup.get(member["id"], {})
             gross = rollup.get("gross") or Decimal("0.00")
             refunds = rollup.get("refunds") or Decimal("0.00")
+            tax = rollup.get("tax") or Decimal("0.00")
             tickets_sold = ticket_rollup.get(member["id"], 0)
             last_sale = rollup.get("last_sale_at")
 
@@ -369,6 +402,12 @@ class StaffReportView(APIView):
                         ),
                         "gross": _money(bucket["gross"]),
                         "refunds": _money(bucket["refunds"]),
+                        "tax": _money(bucket["tax"]),
+                        "total": _money(
+                            (bucket["gross"] or Decimal("0.00"))
+                            + (bucket["tax"] or Decimal("0.00"))
+                            - (bucket["refunds"] or Decimal("0.00"))
+                        ),
                     }
                 )
 
@@ -384,6 +423,8 @@ class StaffReportView(APIView):
                     "gross": _money(gross),
                     "refunds": _money(refunds),
                     "net": _money(gross - refunds),
+                    "tax": _money(tax),
+                    "total": _money(gross + tax - refunds),
                     "avg_ticket_value": _money(gross / tickets_sold)
                     if tickets_sold
                     else None,
@@ -395,7 +436,7 @@ class StaffReportView(APIView):
         # Busiest earners first; staff with no sales fall to the bottom by code.
         rows.sort(key=lambda row: (-Decimal(row["net"]), row["staff_code"]))
 
-        gross_total, refunds_total, net_total = _totals(sales)
+        totals = _totals(sales)
 
         return Response(
             {
@@ -407,9 +448,11 @@ class StaffReportView(APIView):
                     "staff_with_sales": sum(1 for row in rows if row["transactions"]),
                     "transactions": sum(row["transactions"] for row in rows),
                     "tickets": sum(row["tickets"] for row in rows),
-                    "gross": str(gross_total),
-                    "refunds": str(refunds_total),
-                    "net": str(net_total),
+                    "gross": str(totals["gross"]),
+                    "refunds": str(totals["refunds"]),
+                    "net": str(totals["net"]),
+                    "tax": str(totals["tax"]),
+                    "total": str(totals["total"]),
                 },
                 "staff": rows,
             }

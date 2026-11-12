@@ -28,6 +28,9 @@ class Sale(TenantOwnedModel):
     )
     gross_total = models.DecimalField(max_digits=12, decimal_places=2)
     refund_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Tax collected on top of (or already inside) gross_total. Zero on every
+    # sale created before tax was enabled, which keeps old totals identical.
+    tax_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     currency = models.CharField(max_length=8, default="INR")
     created_by = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="created_sales"
@@ -55,7 +58,14 @@ class SaleItem(models.Model):
     )
     quantity = models.PositiveIntegerField()
     unit_price_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
+    # Taxable amount of this line. With tax off it is unit_price * quantity.
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
+    # Frozen tax, exactly like unit_price_snapshot: editing the rate later must
+    # never rewrite what a past sale was charged.
+    tax_rate_snapshot = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    tax_code = models.CharField(max_length=20, blank=True, default="")
+    tax_name = models.CharField(max_length=100, blank=True, default="")
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     class Meta:
         db_table = "tixelise_sales_saleitem"

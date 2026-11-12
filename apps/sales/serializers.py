@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.ticketing.serializers import TicketSerializer
@@ -29,6 +31,10 @@ class SaleItemSerializer(serializers.ModelSerializer):
             "quantity",
             "unit_price_snapshot",
             "line_total",
+            "tax_rate_snapshot",
+            "tax_code",
+            "tax_name",
+            "tax_amount",
         ]
 
 
@@ -39,6 +45,20 @@ class SaleSerializer(serializers.ModelSerializer):
     staff_name = serializers.CharField(source="staff.display_name", read_only=True)
     items = SaleItemSerializer(many=True, read_only=True)
     tickets = TicketSerializer(many=True, read_only=True)
+    total_payable = serializers.SerializerMethodField()
+
+    def get_total_payable(self, obj):
+        """What the customer actually paid: taxable subtotal + tax - refunds.
+
+        Identical to `gross_total` on every sale created before tax existed,
+        because `tax_total` defaults to zero.
+        """
+        value = (
+            Decimal(obj.gross_total or 0)
+            + Decimal(obj.tax_total or 0)
+            - Decimal(obj.refund_total or 0)
+        )
+        return str(value.quantize(Decimal("0.01")))
 
     class Meta:
         model = Sale
@@ -54,7 +74,9 @@ class SaleSerializer(serializers.ModelSerializer):
             "status",
             "source",
             "gross_total",
+            "tax_total",
             "refund_total",
+            "total_payable",
             "currency",
             "items",
             "tickets",

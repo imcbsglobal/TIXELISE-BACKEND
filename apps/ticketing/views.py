@@ -1,3 +1,6 @@
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -17,6 +20,35 @@ from .serializers import (
 )
 
 
+def _tenant(request):
+    """The tenant behind the request.
+
+    This endpoint authenticates with IsAuthenticated (POS staff read it too), so
+    unlike the admin views it cannot assume TenantScopedPermission has attached
+    the tenant object yet.
+    """
+    tenant = getattr(request, "tenant_obj", None)
+    if tenant is not None:
+        return tenant
+    from apps.core.context import get_current_tenant_id
+    from apps.tenancy.models import Tenant
+
+    tenant_id = get_current_tenant_id()
+    return Tenant.objects.filter(pk=tenant_id).first() if tenant_id else None
+
+
+def _day_start(tenant, raw, field):
+    """Midnight of `raw` in the tenant's timezone; kept aware so UTC rows match."""
+    from rest_framework.exceptions import ValidationError
+
+    try:
+        day = datetime.strptime(raw, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise ValidationError({field: "must be YYYY-MM-DD."})
+    zone = getattr(tenant, "timezone", None) or "UTC"
+    return datetime.combine(day, time.min, tzinfo=ZoneInfo(zone))
+
+
 class TicketListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = TicketListSerializer
@@ -34,6 +66,18 @@ class TicketListView(generics.ListAPIView):
             qs = qs.filter(status=params["status"])
         if params.get("ticket_code"):
             qs = qs.filter(ticket_code=params["ticket_code"])
+        # Issued-date bounds, in the tenant's timezone, matching the sales list.
+        if params.get("date_from") or params.get("date_to"):
+            tenant = _tenant(self.request)
+        if params.get("date_from"):
+            qs = qs.filter(
+                issued_at__gte=_day_start(tenant, params["date_from"], "date_from")
+            )
+        if params.get("date_to"):
+            qs = qs.filter(
+                issued_at__lt=_day_start(tenant, params["date_to"], "date_to")
+                + timedelta(days=1)
+            )
         return qs
 
 
