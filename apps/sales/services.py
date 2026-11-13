@@ -30,7 +30,7 @@ from apps.core.exceptions import (
 )
 from apps.events.models import Event
 from apps.staff.models import StaffProfile
-from apps.taxation.services import apply_tax_to_line, resolve_tax
+from apps.taxation.services import apply_tax_to_line, resolve_tax_for_event
 from apps.ticketing.models import Ticket, TicketSequence
 
 from .models import IdempotencyRecord, Sale, SaleItem
@@ -198,9 +198,10 @@ def create_sale(*, tenant, user, staff, event_id, items_data, idempotency_key):
             "replayed": True,
         }
 
-    # Tax is resolved once, from the locally stored setting - never from the
-    # central master - so committing a sale cannot depend on a third party.
-    tax = resolve_tax(tenant)
+    # Tax is resolved once, from the event's own setting or the locally stored
+    # company setting - never from the central master - so committing a sale
+    # cannot depend on a third party.
+    tax = resolve_tax_for_event(event, tenant)
     lines = [
         (
             category,
@@ -248,6 +249,7 @@ def create_sale(*, tenant, user, staff, event_id, items_data, idempotency_key):
                         tax_code=tax.code if tax else "",
                         tax_name=tax.name if tax else "",
                         tax_amount=tax_amount,
+                        hsn_code=tax.hsn_code if tax else "",
                     )
                     for _ in range(quantity):
                         seq = next(seq_iter)

@@ -35,6 +35,7 @@ class SaleItemSerializer(serializers.ModelSerializer):
             "tax_code",
             "tax_name",
             "tax_amount",
+            "hsn_code",
         ]
 
 

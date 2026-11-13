@@ -17,6 +17,7 @@ Contract
 * Comp (``source=manual``) tickets are never taxed.
 """
 
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from .models import TaxSetting
@@ -53,7 +54,7 @@ def rate_from_master_row(kind, row) -> Decimal:
 
 
 def resolve_tax(tenant):
-    """The ``TaxSetting`` to charge, or ``None`` when tax is off.
+    """The company ``TaxSetting`` to charge, or ``None`` when tax is off.
 
     A zero rate is treated as "no tax": charging 0% is indistinguishable from
     switching the feature off, and returning ``None`` keeps the sale path
@@ -63,6 +64,50 @@ def resolve_tax(tenant):
     if setting is None or not setting.enabled or setting.rate <= ZERO:
         return None
     return setting
+
+
+@dataclass(frozen=True)
+class ResolvedTax:
+    """The rate, label and HSN a sale line should freeze."""
+
+    rate: Decimal
+    code: str
+    name: str
+    prices_include_tax: bool
+    hsn_code: str = ""
+
+
+def resolve_tax_for_event(event, tenant):
+    """Resolve the tax an event's ticket sales should charge.
+
+    An event can charge its own rate, explicitly opt out, or inherit the
+    company-wide setting. ``None`` means no tax, exactly like ``resolve_tax``.
+    """
+    mode = getattr(event, "tax_mode", None)
+    if mode == "disabled":
+        return None
+    if mode == "event":
+        rate = _to_rate(getattr(event, "tax_rate", None))
+        if rate <= ZERO:
+            return None
+        return ResolvedTax(
+            rate=rate,
+            code="",
+            name="Event tax",
+            prices_include_tax=bool(event.prices_include_tax),
+            hsn_code=str(event.hsn_code or "").strip(),
+        )
+
+    setting = resolve_tax(tenant)
+    if setting is None:
+        return None
+    return ResolvedTax(
+        rate=setting.rate,
+        code=setting.code,
+        name=setting.name,
+        prices_include_tax=setting.prices_include_tax,
+        hsn_code="",
+    )
 
 
 def apply_tax_to_line(*, unit_price, quantity, tax):
@@ -93,9 +138,11 @@ def tax_snapshot_fields(tax) -> dict:
             "tax_code": "",
             "tax_name": "",
             "tax_amount": ZERO,
+            "hsn_code": "",
         }
     return {
         "tax_rate_snapshot": tax.rate,
         "tax_code": tax.code,
         "tax_name": tax.name,
+        "hsn_code": getattr(tax, "hsn_code", ""),
     }

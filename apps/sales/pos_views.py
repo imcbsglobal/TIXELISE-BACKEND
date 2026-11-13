@@ -10,7 +10,7 @@ from apps.core.exceptions import Forbidden, NotFound
 from apps.core.permissions import IsPOSSStaff
 from apps.events.models import Event
 from apps.staff.models import StaffProfile
-from apps.taxation.services import apply_tax_to_line, resolve_tax
+from apps.taxation.services import apply_tax_to_line, resolve_tax_for_event
 from apps.ticketing.models import Ticket
 
 from .serializers import SaleCreateSerializer, SaleSerializer
@@ -64,7 +64,7 @@ class POSCategoryListView(APIView):
     def get(self, request, event_id):
         staff = _current_staff(request)
         try:
-            assignment = StaffEventAssignment.objects.get(
+            assignment = StaffEventAssignment.objects.select_related("event").get(
                 staff=staff, event_id=event_id, status=StaffEventAssignment.Status.ACTIVE
             )
         except StaffEventAssignment.DoesNotExist:
@@ -84,8 +84,9 @@ class POSCategoryListView(APIView):
             prices = prices.filter(category_id__in=allowed)
 
         # The terminal shows price + tax, so it needs the rate too. Read from the
-        # stored setting (no network call) exactly like a sale does.
-        tax = resolve_tax(request.tenant_obj)
+        # event's setting or the stored company setting (no network call) exactly
+        # like a sale does.
+        tax = resolve_tax_for_event(assignment.event, request.tenant_obj)
         rows = []
         for p in prices:
             net, tax_amount = apply_tax_to_line(
@@ -101,6 +102,7 @@ class POSCategoryListView(APIView):
                     "tax_rate": str(tax.rate) if tax else "0.00",
                     "tax_code": tax.code if tax else "",
                     "tax_included": bool(tax.prices_include_tax) if tax else False,
+                    "hsn_code": tax.hsn_code if tax else "",
                     "tax_amount": str(tax_amount),
                     "price_with_tax": str(net + tax_amount),
                 }

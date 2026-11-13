@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 from django.db import models
 
 from apps.core.models import TenantOwnedModel
@@ -13,6 +15,11 @@ class Event(TenantOwnedModel):
     class EventType(models.TextChoices):
         REGULAR = "regular", "Regular"
         PERIODICAL = "periodical", "Periodical"
+
+    class TaxMode(models.TextChoices):
+        INHERIT = "inherit", "Use company tax setting"
+        EVENT = "event", "Charge tax for this event"
+        DISABLED = "disabled", "No tax for this event"
 
     # Existing rows keep the old behaviour; new events opt in explicitly.
     event_type = models.CharField(
@@ -31,6 +38,22 @@ class Event(TenantOwnedModel):
     end_at = models.DateTimeField(null=True, blank=True)
     sales_start_at = models.DateTimeField(null=True, blank=True)
     sales_end_at = models.DateTimeField(null=True, blank=True)
+    # The daily program window: time of day only, independent of the event's
+    # date range. Both are set together and only describe the programme; they
+    # do not gate POS sales (that is what the sales window above is for).
+    program_start_time = models.TimeField(null=True, blank=True)
+    program_end_time = models.TimeField(null=True, blank=True)
+    # Tax for ticket sales. "inherit" keeps the company-wide TaxSetting; the
+    # other modes let one event charge its own rate (or no tax at all) without
+    # touching the company default for every other event.
+    tax_mode = models.CharField(
+        max_length=16, choices=TaxMode.choices, default=TaxMode.INHERIT, db_index=True
+    )
+    tax_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    hsn_code = models.CharField(max_length=20, blank=True, default="")
+    prices_include_tax = models.BooleanField(default=False)
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.DRAFT, db_index=True
     )
@@ -50,6 +73,21 @@ class Event(TenantOwnedModel):
                 condition=models.Q(end_at__gt=models.F("start_at")),
                 name="event_end_after_start",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(program_start_time__isnull=True)
+                    | models.Q(program_end_time__isnull=True)
+                    | models.Q(program_end_time__gt=models.F("program_start_time"))
+                ),
+                name="event_program_end_after_start",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(tax_rate__isnull=True)
+                    | models.Q(tax_rate__gte=0, tax_rate__lte=100)
+                ),
+                name="event_tax_rate_range",
+            ),
         ]
         ordering = ["-start_at"]
 
@@ -59,6 +97,15 @@ class Event(TenantOwnedModel):
     @property
     def is_regular(self):
         return self.event_type == self.EventType.REGULAR
+
+    @property
+    def program_duration_minutes(self):
+        """Minutes between the program start and end, or None when unset."""
+        if self.program_start_time is None or self.program_end_time is None:
+            return None
+        start = datetime.combine(date.min, self.program_start_time)
+        end = datetime.combine(date.min, self.program_end_time)
+        return int((end - start).total_seconds() // 60)
 
     def is_within_sales_window(self, when=None):
         from django.utils import timezone

@@ -167,6 +167,7 @@ class TicketPrintView(APIView):
             "tax_code": item.tax_code if item else "",
             "tax_name": item.tax_name if item else "",
             "tax_amount": str(item.tax_amount) if item else "0.00",
+            "hsn_code": item.hsn_code if item else "",
             "total": str(item.line_total + item.tax_amount) if item else None,
         }
 

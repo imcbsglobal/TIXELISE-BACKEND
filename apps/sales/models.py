@@ -66,6 +66,7 @@ class SaleItem(models.Model):
     tax_code = models.CharField(max_length=20, blank=True, default="")
     tax_name = models.CharField(max_length=100, blank=True, default="")
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    hsn_code = models.CharField(max_length=20, blank=True, default="")
 
     class Meta:
         db_table = "tixelise_sales_saleitem"

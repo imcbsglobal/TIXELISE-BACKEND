@@ -666,15 +666,32 @@ Query params: `search` (code or name contains), `status` (`draft|active|complete
 {
   "code": "EV004",
   "name": "Music Fest 2026",
+  "event_type": "periodical",
   "description": "Annual music festival",
   "venue": "Central Auditorium",
   "address": "Kochi, Kerala",
   "start_at": "2026-11-01T18:00:00Z",
   "end_at": "2026-11-02T00:00:00Z",
   "sales_start_at": "2026-10-20T00:00:00Z",
-  "sales_end_at": "2026-11-01T16:00:00Z"
+  "sales_end_at": "2026-11-01T16:00:00Z",
+  "program_start_time": "18:00",
+  "program_end_time": "21:30",
+  "tax_mode": "event",
+  "tax_rate": "12.50",
+  "hsn_code": "9983",
+  "prices_include_tax": false
 }
 ```
+
+`program_start_time` / `program_end_time` are an optional daily time-of-day window for
+both event types. Supply both or neither, and the end must be later than the start
+(no cross-midnight windows). They do not change the sales window.
+
+`tax_mode` is `inherit` (default, use the company tax setting), `event` (charge the
+event's own rate), or `disabled` (no tax for this event). When `tax_mode="event"`,
+`tax_rate` must be greater than 0 and at most 100, and `hsn_code` is required as 4–8
+digits. `prices_include_tax` only applies in `event` mode. Sales snapshot the HSN on
+each sale line and include it in the ticket print payload.
 
 **Response `201 Created`:**
 
@@ -683,6 +700,7 @@ Query params: `search` (code or name contains), `status` (`draft|active|complete
   "id": 1,
   "code": "EV004",
   "name": "Music Fest 2026",
+  "event_type": "periodical",
   "description": "Annual music festival",
   "venue": "Central Auditorium",
   "address": "Kochi, Kerala",
@@ -690,6 +708,13 @@ Query params: `search` (code or name contains), `status` (`draft|active|complete
   "end_at": "2026-11-02T00:00:00Z",
   "sales_start_at": "2026-10-20T00:00:00Z",
   "sales_end_at": "2026-11-01T16:00:00Z",
+  "program_start_time": "18:00:00",
+  "program_end_time": "21:30:00",
+  "program_duration_minutes": 210,
+  "tax_mode": "event",
+  "tax_rate": "12.50",
+  "hsn_code": "9983",
+  "prices_include_tax": false,
   "status": "draft",
   "created_by": 2,
   "created_at": "2026-10-20T08:05:12Z",
@@ -697,7 +722,9 @@ Query params: `search` (code or name contains), `status` (`draft|active|complete
 }
 ```
 
-**Errors:** `400 VALIDATION_ERROR` (`end_at` ≤ `start_at`, non-alphanumeric code, duplicate `code` in tenant).
+**Errors:** `400 VALIDATION_ERROR` (`end_at` ≤ `start_at`, non-alphanumeric code, duplicate `code` in tenant,
+only one of `program_start_time` / `program_end_time`, `program_end_time` ≤ `program_start_time`,
+missing or 0–100 `tax_rate` in `event` mode, or missing/non-4–8-digit `hsn_code` in `event` mode).
 
 #### Event detail / update
 
@@ -709,7 +736,16 @@ PATCH /api/v1/admin/events/1/
 **PATCH request:**
 
 ```json
-{ "venue": "Grand Palace Grounds", "sales_end_at": "2026-11-01T18:00:00Z" }
+{
+  "venue": "Grand Palace Grounds",
+  "sales_end_at": "2026-11-01T18:00:00Z",
+  "program_start_time": "17:00",
+  "program_end_time": "20:00",
+  "tax_mode": "event",
+  "tax_rate": "18.00",
+  "hsn_code": "9983",
+  "prices_include_tax": true
+}
 ```
 
 **Response `200 OK`:** full event object.
@@ -1110,8 +1146,11 @@ GET /api/v1/admin/sales/?event=1&staff=1&status=completed&sale_reference=DREAMS0
       "staff_code": "ST012",
       "staff_name": "Ravi Kumar",
       "status": "completed",
+      "source": "pos",
       "gross_total": "998.00",
+      "tax_total": "124.75",
       "refund_total": "0.00",
+      "total_payable": "1122.75",
       "currency": "INR",
       "items": [
         {
@@ -1121,7 +1160,12 @@ GET /api/v1/admin/sales/?event=1&staff=1&status=completed&sale_reference=DREAMS0
           "category_name": "Adult",
           "quantity": 2,
           "unit_price_snapshot": "499.00",
-          "line_total": "998.00"
+          "line_total": "998.00",
+          "tax_rate_snapshot": "12.50",
+          "tax_code": "",
+          "tax_name": "Event tax",
+          "tax_amount": "124.75",
+          "hsn_code": "9983"
         }
       ],
       "tickets": [
@@ -1284,7 +1328,17 @@ Read-only: returns what a ticket should look like on paper, including the tenant
     },
     "category": "Adult",
     "staff_code": "ST012",
-    "sale_reference": "DREAMS001-S-6800898B"
+    "sale_reference": "DREAMS001-S-6800898B",
+    "currency": "INR",
+    "unit_price": "499.00",
+    "quantity": 2,
+    "line_total": "998.00",
+    "tax_rate": "12.50",
+    "tax_code": "",
+    "tax_name": "Event tax",
+    "tax_amount": "124.75",
+    "hsn_code": "9983",
+    "total": "1122.75"
   },
   "print": {
     "header": "TASK MOBILE APPLICATION",
@@ -1884,12 +1938,37 @@ GET /api/v1/pos/events/1/categories/
 
 ```json
 [
-  { "category": 1, "code": "ADULT", "name": "Adult", "price": "499.00", "currency": "INR" },
-  { "category": 3, "code": "VIP", "name": "VIP", "price": "1499.00", "currency": "INR" }
+  {
+    "category": 1,
+    "code": "ADULT",
+    "name": "Adult",
+    "price": "499.00",
+    "currency": "INR",
+    "tax_rate": "12.50",
+    "tax_code": "",
+    "tax_included": false,
+    "hsn_code": "9983",
+    "tax_amount": "62.38",
+    "price_with_tax": "561.38"
+  },
+  {
+    "category": 3,
+    "code": "VIP",
+    "name": "VIP",
+    "price": "1499.00",
+    "currency": "INR",
+    "tax_rate": "12.50",
+    "tax_code": "",
+    "tax_included": false,
+    "hsn_code": "9983",
+    "tax_amount": "187.38",
+    "price_with_tax": "1686.38"
+  }
 ]
 ```
 
 > Only categories with an active, currently-effective `EventPrice` are listed, and only those allowed by the assignment when `restrict_categories=true`.
+> Tax comes from the event when it has its own tax setting, otherwise from the company tax setting. Tax-off events return `tax_rate: "0.00"`.
 
 **Errors:** `403 FORBIDDEN` (not assigned), `403 FORBIDDEN` (assignment not yet valid / expired).
 
