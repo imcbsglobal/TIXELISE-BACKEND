@@ -327,7 +327,7 @@ class TaxOnSaleTests(APITestBase):
         self.assertEqual(Sale.objects.count(), 1)
         self.assertEqual(SaleItem.objects.count(), 1)
 
-    def test_complimentary_tickets_are_never_taxed(self):
+    def test_manual_tickets_are_taxed_like_pos(self):
         self._enable()
         self.login_admin_a()
         response = self.client.post(
@@ -341,9 +341,9 @@ class TaxOnSaleTests(APITestBase):
             headers={"Idempotency-Key": "comp-1"},
         )
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(response.data["gross_total"], "0.00")
-        self.assertEqual(response.data["tax_total"], "0.00")
-        self.assertEqual(response.data["total_payable"], "0.00")
+        self.assertEqual(response.data["gross_total"], "998.00")
+        self.assertEqual(response.data["tax_total"], "179.64")
+        self.assertEqual(response.data["total_payable"], "1177.64")
 
 
 class TaxReportingTests(APITestBase):

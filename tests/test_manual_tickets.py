@@ -27,7 +27,9 @@ class ManualTicketTests(APITestBase):
         )
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.data["source"], "manual")
-        self.assertEqual(response.data["gross_total"], "0.00")
+        self.assertEqual(response.data["gross_total"], "998.00")
+        self.assertEqual(response.data["tax_total"], "0.00")
+        self.assertEqual(response.data["total_payable"], "998.00")
         self.assertEqual(response.data["staff_code"], "ADMIN")
         self.assertEqual(response.data["staff_name"], "admin_a")
         self.assertEqual(len(response.data["tickets"]), 2)
@@ -117,6 +119,19 @@ class ManualTicketTests(APITestBase):
 
         detail = self.client.get(f"/api/v1/admin/staff/{holder.id}/")
         self.assertEqual(detail.status_code, 404)
+
+    def test_manual_sale_counts_as_revenue(self):
+        self.login_admin_a()
+        self.issue(
+            {
+                "event": self.event_a.id,
+                "items": [{"category": self.cat_a_adult.id, "quantity": 2}],
+            }
+        )
+        data = self.client.get("/api/v1/admin/dashboard/").data
+        self.assertEqual(data["gross_sales_today"], "998.00")
+        self.assertEqual(data["completed_sales_today"], 1)
+        self.assertEqual(data["tickets_sold_today"], 2)
 
     def test_replay_of_self_issue_creates_no_extra_tickets(self):
         self.login_admin_a()

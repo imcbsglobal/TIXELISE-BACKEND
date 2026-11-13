@@ -142,7 +142,7 @@ class TicketReprintView(APIView):
 
 
 class ManualTicketIssueView(APIView):
-    """Admin-issued complimentary tickets (a zero-value, manual-sourced sale)."""
+    """Admin-issued manual tickets (a real, priced and taxed sale)."""
 
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 

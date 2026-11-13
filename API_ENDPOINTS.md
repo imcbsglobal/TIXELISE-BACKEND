@@ -120,7 +120,7 @@ Tenant context comes **only from verified JWT claims**. Every request re-checks 
  │   GET /admin/dashboard/        → today's totals                       │
  │   GET /admin/sales/?event=1    → sale detail with price snapshots     │
  │   GET /admin/tickets/          → ticket codes, statuses               │
- │   POST /admin/tickets/manual/  → issue complimentary tickets          │
+ │   POST /admin/tickets/manual/  → issue manual (charged) tickets       │
  │   GET /admin/reports/daily/    → event/category/staff breakdowns      │
  │   GET /admin/audit-logs/       → full trace with correlation IDs      │
  └────────────────────────────────────────────────────────────────────────┘
@@ -1271,17 +1271,23 @@ POST /api/v1/admin/tickets/6f9619ff-8b86-d011-b42d-00c04fc964ff/reprint/
 
 > Reprints **never create a new ticket or sale** — they increment `reprint_count` and write an audit record.
 
-#### Manual (complimentary) ticket generation
+#### Manual (charged) ticket generation
 
 ```
 POST /api/v1/admin/tickets/manual/
 Idempotency-Key: 0f6c1f9e-6d1a-4c2b-9a10-6f0f0f2f9c11   (or "idempotency_key" in the body)
 ```
 
-Tenant admin only. Issues comp tickets without a POS sale. A real `Sale` row is
-created with `source = "manual"`, `gross_total = 0` and a `-M-` reference prefix,
-so revenue and transaction reports stay POS-only; the tickets themselves print,
-reprint and count exactly like POS tickets.
+Tenant admin only. Issues manual tickets that are charged exactly like a POS
+sale: the opened price is resolved server-side, tax is applied per line, and the
+resulting `Sale` stores a real `gross_total`/`tax_total` with a `-M-` reference
+prefix. Manual sales count in revenue, transaction and staff reports; they are
+tagged `source = "manual"` only so `/admin/sales/?source=manual` lists them
+separately. The tickets print, reprint and count exactly like POS tickets.
+
+`staff` is optional. Omit it (or send `null`) to issue as the logged-in admin;
+no event assignment is required. Send a staff id to issue on that staff member's
+behalf, which still requires an active assignment.
 
 ```json
 {
@@ -1292,12 +1298,12 @@ reprint and count exactly like POS tickets.
 ```
 
 **Response `201 Created`:** a sale object (same shape as `/admin/sales/{id}/`) with
-`"source": "manual"`, `"gross_total": "0.00"` and the issued tickets nested under
-`"tickets"`. Replaying the same idempotency key returns the original sale with
-`"replayed": true` and creates no extra tickets.
+`"source": "manual"`, the charged `gross_total`/`tax_total`/`total_payable`, and
+the issued tickets nested under `"tickets"`. Replaying the same idempotency key
+returns the original sale with `"replayed": true` and creates no extra tickets.
 
 Errors: `EVENT_NOT_SELLABLE` (event not active), `STAFF_NOT_ASSIGNED`,
-`STAFF_INACTIVE`, `PRICE_UNAVAILABLE` (category has no active price),
+`STAFF_INACTIVE`, `PRICE_UNAVAILABLE` (category has no active/effective price),
 `CATEGORY_NOT_ALLOWED` (assignment restricts categories), `IDEMPOTENCY_CONFLICT`.
 
 #### Ticket print payload

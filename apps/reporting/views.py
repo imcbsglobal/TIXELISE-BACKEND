@@ -39,7 +39,6 @@ def _sales_between(tenant, start, end):
         tenant=tenant,
         created_at__gte=start,
         created_at__lt=end,
-        source=Sale.Source.POS,
     )
 
 
@@ -323,7 +322,6 @@ class StaffReportView(APIView):
             tenant=tenant,
             created_at__gte=start,
             created_at__lt=end,
-            source=Sale.Source.POS,
         )
         tickets = Ticket.objects.filter(
             tenant=tenant, issued_at__gte=start, issued_at__lt=end

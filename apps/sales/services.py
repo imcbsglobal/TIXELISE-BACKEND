@@ -384,33 +384,18 @@ def _manual_assignment(tenant, staff, event):
     return assignment
 
 
-def _snapshot_prices(tenant, event, categories, quantities):
-    """List prices for the record only; comps never charge, so no window check."""
-    priced = []
-    for category, quantity in zip(categories, quantities):
-        try:
-            price = EventPrice.objects.get(
-                tenant=tenant,
-                event=event,
-                category=category,
-                status=EventPrice.Status.ACTIVE,
-            )
-        except EventPrice.DoesNotExist:
-            raise PriceUnavailable()
-        priced.append((category, quantity, price.amount))
-    return priced
-
-
 def issue_manual_tickets(
     *, tenant, user, staff_id=None, event_id, items_data, idempotency_key
 ):
     """
-    Complimentary tickets issued by an admin.
+    Manual tickets issued by an admin, charged exactly like a POS sale.
 
-    Still a real Sale + Ticket pair -- Ticket.sale is non-null -- but tagged
-    source=manual with a zero gross, so POS revenue and transaction counts are
-    unaffected. Sequence numbers come from the shared per-event counter, so
-    comp codes interleave with POS codes and never collide.
+    The opening price is resolved server-side and tax is applied per line, so
+    the sale stores a real ``gross_total``/``tax_total`` and the tickets count
+    as revenue and transactions in every report. It is tagged source=manual
+    only so the Manual Tickets history can list these entries separately.
+    Sequence numbers come from the shared per-event counter, so manual codes
+    interleave with POS codes and never collide.
 
     ``staff_id`` is optional: when it is ``None`` the tickets belong to the
     issuing admin, via a lazily created holder profile, and no event assignment
@@ -449,7 +434,7 @@ def issue_manual_tickets(
                     )
 
     quantities = [item["quantity"] for item in items_data]
-    priced_items = _snapshot_prices(tenant, event, categories, quantities)
+    priced_items = _resolve_prices(tenant, event, categories, quantities)
 
     fingerprint = request_fingerprint(
         {
@@ -469,7 +454,19 @@ def issue_manual_tickets(
             "replayed": True,
         }
 
-    total_tickets = sum(quantity for _, quantity, _ in priced_items)
+    tax = resolve_tax_for_event(event, tenant)
+    lines = [
+        (
+            category,
+            quantity,
+            unit_price,
+            *apply_tax_to_line(unit_price=unit_price, quantity=quantity, tax=tax),
+        )
+        for category, quantity, unit_price in priced_items
+    ]
+    total_tickets = sum(quantity for _, quantity, _, _, _ in lines)
+    gross_total = sum((line[3] for line in lines), Decimal("0.00"))
+    tax_total = sum((line[4] for line in lines), Decimal("0.00"))
     zero = Decimal("0.00")
     now = timezone.now()
 
@@ -484,7 +481,8 @@ def issue_manual_tickets(
                     event=event,
                     staff=staff,
                     sale_reference=f"{tenant.code}-M-{secrets.token_hex(4).upper()}",
-                    gross_total=zero,
+                    gross_total=gross_total,
+                    tax_total=tax_total,
                     refund_total=zero,
                     currency=tenant.currency,
                     created_by=user,
@@ -494,13 +492,18 @@ def issue_manual_tickets(
 
                 tickets = []
                 seq_iter = iter(sequence_numbers)
-                for category, quantity, unit_price in priced_items:
+                for category, quantity, unit_price, line_total, tax_amount in lines:
                     SaleItem.objects.create(
                         sale=sale,
                         category=category,
                         quantity=quantity,
                         unit_price_snapshot=unit_price,
-                        line_total=zero,
+                        line_total=line_total,
+                        tax_rate_snapshot=tax.rate if tax else Decimal("0.00"),
+                        tax_code=tax.code if tax else "",
+                        tax_name=tax.name if tax else "",
+                        tax_amount=tax_amount,
+                        hsn_code=tax.hsn_code if tax else "",
                     )
                     for _ in range(quantity):
                         seq = next(seq_iter)
@@ -539,6 +542,8 @@ def issue_manual_tickets(
                         "event": event.code,
                         "staff": staff.staff_code,
                         "tickets": len(tickets),
+                        "gross_total": str(gross_total),
+                        "tax_total": str(tax_total),
                         "categories": [c.code for c, _, _ in priced_items],
                         "codes": [t.ticket_code for t in tickets],
                     },

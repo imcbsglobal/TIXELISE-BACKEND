@@ -14,7 +14,8 @@ Contract
 * The rate comes from the stored ``TaxSetting`` copy, never from the central
   master: nothing here performs network I/O, so a sale can never block on (or
   fail because of) a third-party host.
-* Comp (``source=manual``) tickets are never taxed.
+* Manual tickets (``source=manual``) are real sales and are taxed exactly like
+  POS sales.
 """
 
 from dataclasses import dataclass

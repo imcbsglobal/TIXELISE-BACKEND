@@ -76,7 +76,6 @@ class StaffSalesSummaryView(APIView):
                 tenant=tenant,
                 created_at__gte=start,
                 created_at__lt=end,
-                source=Sale.Source.POS,
             )
             .values("staff_id")
             .annotate(
