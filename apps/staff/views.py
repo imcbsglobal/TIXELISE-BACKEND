@@ -73,7 +73,11 @@ class StaffListCreateView(generics.ListCreateAPIView):
         return StaffProfileSerializer
 
     def get_queryset(self):
-        return StaffProfile.objects.select_related("user")
+        # The admin holder profile (manual tickets issued as the admin) is a
+        # ticket owner, not a managed staff member, so it is never listed.
+        return StaffProfile.objects.select_related("user").filter(
+            is_admin_holder=False
+        )
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -110,7 +114,11 @@ class StaffDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = StaffProfileSerializer
 
     def get_queryset(self):
-        return StaffProfile.objects.select_related("user")
+        # Admin holder profiles are hidden here too: editing or deleting one
+        # would strip the admin's own access. They surface as 404.
+        return StaffProfile.objects.select_related("user").filter(
+            is_admin_holder=False
+        )
 
     def perform_update(self, serializer):
         profile = serializer.instance
@@ -134,7 +142,7 @@ class StaffDetailView(generics.RetrieveUpdateAPIView):
         still points at it, mirroring tenant deletion.
         """
         try:
-            profile = StaffProfile.objects.get(pk=pk)
+            profile = StaffProfile.objects.get(pk=pk, is_admin_holder=False)
         except StaffProfile.DoesNotExist:
             raise NotFound("Staff not found.")
 
@@ -208,7 +216,7 @@ class StaffDeactivateView(APIView):
 
     def post(self, request, pk):
         try:
-            profile = StaffProfile.objects.get(pk=pk)
+            profile = StaffProfile.objects.get(pk=pk, is_admin_holder=False)
         except StaffProfile.DoesNotExist:
             raise NotFound("Staff not found.")
 
@@ -239,7 +247,7 @@ class StaffActivateView(APIView):
 
     def post(self, request, pk):
         try:
-            profile = StaffProfile.objects.get(pk=pk)
+            profile = StaffProfile.objects.get(pk=pk, is_admin_holder=False)
         except StaffProfile.DoesNotExist:
             raise NotFound("Staff not found.")
 
@@ -266,7 +274,7 @@ class StaffResetPasswordView(APIView):
         from django.contrib.auth.password_validation import validate_password
 
         try:
-            profile = StaffProfile.objects.get(pk=pk)
+            profile = StaffProfile.objects.get(pk=pk, is_admin_holder=False)
         except StaffProfile.DoesNotExist:
             raise NotFound("Staff not found.")
 

@@ -46,5 +46,7 @@ class ManualTicketItemSerializer(serializers.Serializer):
 
 class ManualTicketIssueSerializer(serializers.Serializer):
     event = serializers.IntegerField()
-    staff = serializers.IntegerField()
+    # Omitted or null means "the issuing admin": no assignment is required.
+    # A value issues the tickets on behalf of that (assigned) staff member.
+    staff = serializers.IntegerField(required=False, allow_null=True)
     items = ManualTicketItemSerializer(many=True, allow_empty=False)

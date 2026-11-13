@@ -16,6 +16,11 @@ class StaffProfile(TenantOwnedModel):
     phone = models.CharField(max_length=32, blank=True, default="")
     email = models.EmailField(blank=True, default="")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    # True only for the auto-created holder profile that lets a tenant admin
+    # issue manual tickets as themselves. Such a profile is a ticket owner, not
+    # a managed staff member, so staff endpoints hide it: deactivating or
+    # deleting it would remove the admin's own access.
+    is_admin_holder = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         "accounts.User",
         null=True,

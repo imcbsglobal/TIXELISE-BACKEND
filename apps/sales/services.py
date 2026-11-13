@@ -326,6 +326,48 @@ def _load_manual_staff(tenant, staff_id) -> StaffProfile:
     return staff
 
 
+def _unique_admin_staff_code(tenant) -> str:
+    """A tenant-unique staff code for the admin holder, based on ``ADMIN``."""
+    base = "ADMIN"
+    taken = set(
+        StaffProfile.objects.filter(tenant=tenant).values_list("staff_code", flat=True)
+    )
+    if base not in taken:
+        return base
+    suffix = 2
+    while f"{base}{suffix}" in taken:
+        suffix += 1
+    return f"{base}{suffix}"
+
+
+def get_admin_holder(tenant, user) -> StaffProfile:
+    """The StaffProfile that owns tickets an admin issues as themselves.
+
+    Created lazily on first use. It is a ticket owner only: no POS membership is
+    added and the admin keeps the ``tenant_admin`` role, so the profile is
+    marked ``is_admin_holder`` and hidden from staff management. Reuses an
+    existing profile for the same user when one is present.
+    """
+    profile = StaffProfile.objects.filter(tenant=tenant, user=user).first()
+    if profile is not None:
+        return profile
+    display_name = user.get_full_name().strip() or user.username
+    try:
+        return StaffProfile.objects.create(
+            tenant=tenant,
+            user=user,
+            staff_code=_unique_admin_staff_code(tenant),
+            display_name=display_name,
+            email=user.email or "",
+            status=StaffProfile.Status.ACTIVE,
+            is_admin_holder=True,
+            created_by=user,
+        )
+    except IntegrityError:
+        # A concurrent request created it first (unique tenant + user).
+        return StaffProfile.objects.get(tenant=tenant, user=user)
+
+
 def _manual_assignment(tenant, staff, event):
     assignment = (
         StaffEventAssignment.objects.filter(
@@ -360,7 +402,7 @@ def _snapshot_prices(tenant, event, categories, quantities):
 
 
 def issue_manual_tickets(
-    *, tenant, user, staff_id, event_id, items_data, idempotency_key
+    *, tenant, user, staff_id=None, event_id, items_data, idempotency_key
 ):
     """
     Complimentary tickets issued by an admin.
@@ -369,6 +411,11 @@ def issue_manual_tickets(
     source=manual with a zero gross, so POS revenue and transaction counts are
     unaffected. Sequence numbers come from the shared per-event counter, so
     comp codes interleave with POS codes and never collide.
+
+    ``staff_id`` is optional: when it is ``None`` the tickets belong to the
+    issuing admin, via a lazily created holder profile, and no event assignment
+    is required. When a staff id is supplied the existing rules apply unchanged
+    -- the staff member must be active and assigned to the event.
     """
     if not idempotency_key or len(idempotency_key) > 128:
         raise BadRequest(
@@ -382,17 +429,25 @@ def issue_manual_tickets(
     if items_data is None or len(items_data) == 0:
         raise BadRequest(detail="At least one item is required.", code="EMPTY_SALE")
 
-    staff = _load_manual_staff(tenant, staff_id)
-    assignment = _manual_assignment(tenant, staff, event)
-
     categories = _load_categories(tenant, items_data)
-    if assignment.restrict_categories:
-        allowed_ids = set(assignment.allowed_categories.values_list("id", flat=True))
-        for category in categories:
-            if category.id not in allowed_ids:
-                raise CategoryNotAllowed(
-                    "This ticket category is not allowed for this staff member."
-                )
+
+    if staff_id is None:
+        # The admin issues as themselves: no assignment is required and every
+        # active category is allowed.
+        staff = get_admin_holder(tenant, user)
+    else:
+        staff = _load_manual_staff(tenant, staff_id)
+        assignment = _manual_assignment(tenant, staff, event)
+        if assignment.restrict_categories:
+            allowed_ids = set(
+                assignment.allowed_categories.values_list("id", flat=True)
+            )
+            for category in categories:
+                if category.id not in allowed_ids:
+                    raise CategoryNotAllowed(
+                        "This ticket category is not allowed for this staff member."
+                    )
+
     quantities = [item["quantity"] for item in items_data]
     priced_items = _snapshot_prices(tenant, event, categories, quantities)
 

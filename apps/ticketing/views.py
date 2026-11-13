@@ -161,7 +161,8 @@ class ManualTicketIssueView(APIView):
         result = issue_manual_tickets(
             tenant=request.tenant_obj,
             user=request.user,
-            staff_id=serializer.validated_data["staff"],
+            # Absent/null means the admin issues the tickets as themselves.
+            staff_id=serializer.validated_data.get("staff"),
             event_id=serializer.validated_data["event"],
             items_data=items_data,
             idempotency_key=idempotency_key,
