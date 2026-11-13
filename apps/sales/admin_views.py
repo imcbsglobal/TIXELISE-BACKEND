@@ -25,7 +25,7 @@ class AdminSaleListView(generics.ListAPIView):
     serializer_class = SaleSerializer
 
     def get_queryset(self):
-        qs = Sale.objects.select_related("event", "staff").prefetch_related(
+        qs = Sale.objects.select_related("event", "staff", "agent").prefetch_related(
             "items__category", "tickets"
         )
         params = self.request.query_params
@@ -33,6 +33,8 @@ class AdminSaleListView(generics.ListAPIView):
             qs = qs.filter(event_id=params["event"])
         if params.get("staff"):
             qs = qs.filter(staff_id=params["staff"])
+        if params.get("agent"):
+            qs = qs.filter(agent_id=params["agent"])
         if params.get("status"):
             qs = qs.filter(status=params["status"])
         if params.get("source"):
@@ -60,6 +62,6 @@ class AdminSaleDetailView(generics.RetrieveAPIView):
     serializer_class = SaleSerializer
 
     def get_queryset(self):
-        return Sale.objects.select_related("event", "staff").prefetch_related(
+        return Sale.objects.select_related("event", "staff", "agent").prefetch_related(
             "items__category", "tickets"
         )

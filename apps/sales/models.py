@@ -20,6 +20,13 @@ class Sale(TenantOwnedModel):
     staff = models.ForeignKey(
         "staff.StaffProfile", on_delete=models.PROTECT, related_name="sales"
     )
+    agent = models.ForeignKey(
+        "agents.Agent",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="sales",
+    )
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.COMPLETED, db_index=True
     )

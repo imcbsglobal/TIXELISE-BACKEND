@@ -190,6 +190,16 @@ class TicketPrintView(APIView):
                             if ticket.event.end_at
                             else None
                         ),
+                        "program_start_time": (
+                            ticket.event.program_start_time.strftime("%H:%M")
+                            if ticket.event.program_start_time
+                            else None
+                        ),
+                        "program_end_time": (
+                            ticket.event.program_end_time.strftime("%H:%M")
+                            if ticket.event.program_end_time
+                            else None
+                        ),
                     },
                     "category": ticket.category.name,
                     "staff_code": ticket.staff.staff_code,

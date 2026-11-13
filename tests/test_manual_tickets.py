@@ -3,7 +3,9 @@ from datetime import timedelta
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.agents.models import Agent
 from apps.events.models import Event
+from apps.sales.models import Sale
 from apps.staff.models import StaffProfile
 
 from .base import APITestBase
@@ -132,6 +134,48 @@ class ManualTicketTests(APITestBase):
         self.assertEqual(data["gross_sales_today"], "998.00")
         self.assertEqual(data["completed_sales_today"], 1)
         self.assertEqual(data["tickets_sold_today"], 2)
+
+    def test_manual_issue_with_agent(self):
+        self.login_admin_a()
+        response = self.issue(
+            {
+                "event": self.event_a.id,
+                "agent": self.agent_a.id,
+                "items": [{"category": self.cat_a_adult.id, "quantity": 1}],
+            }
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data["agent"], self.agent_a.id)
+        self.assertEqual(response.data["agent_code"], "AG001")
+        self.assertEqual(response.data["agent_name"], "Agent A")
+        self.assertEqual(response.data["agent_place"], "Town A")
+
+        sale = Sale.objects.get(pk=response.data["id"])
+        self.assertEqual(sale.agent, self.agent_a)
+
+    def test_inactive_agent_rejected(self):
+        Agent.objects.filter(pk=self.agent_a.pk).update(status=Agent.Status.INACTIVE)
+        self.login_admin_a()
+        response = self.issue(
+            {
+                "event": self.event_a.id,
+                "agent": self.agent_a.id,
+                "items": [{"category": self.cat_a_adult.id, "quantity": 1}],
+            }
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "AGENT_INACTIVE")
+
+    def test_agent_from_another_tenant_rejected(self):
+        self.login_admin_a()
+        response = self.issue(
+            {
+                "event": self.event_a.id,
+                "agent": self.agent_b.id,
+                "items": [{"category": self.cat_a_adult.id, "quantity": 1}],
+            }
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_replay_of_self_issue_creates_no_extra_tickets(self):
         self.login_admin_a()

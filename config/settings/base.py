@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.catalog",
     "apps.staff",
+    "apps.agents",
     "apps.assignments",
     "apps.ticketing",
     "apps.sales",

@@ -163,6 +163,7 @@ class ManualTicketIssueView(APIView):
             user=request.user,
             # Absent/null means the admin issues the tickets as themselves.
             staff_id=serializer.validated_data.get("staff"),
+            agent_id=serializer.validated_data.get("agent"),
             event_id=serializer.validated_data["event"],
             items_data=items_data,
             idempotency_key=idempotency_key,

@@ -44,9 +44,21 @@ class SaleSerializer(serializers.ModelSerializer):
     event_name = serializers.CharField(source="event.name", read_only=True)
     staff_code = serializers.CharField(source="staff.staff_code", read_only=True)
     staff_name = serializers.CharField(source="staff.display_name", read_only=True)
+    agent_code = serializers.SerializerMethodField()
+    agent_name = serializers.SerializerMethodField()
+    agent_place = serializers.SerializerMethodField()
     items = SaleItemSerializer(many=True, read_only=True)
     tickets = TicketSerializer(many=True, read_only=True)
     total_payable = serializers.SerializerMethodField()
+
+    def get_agent_code(self, obj):
+        return obj.agent.code if obj.agent_id else None
+
+    def get_agent_name(self, obj):
+        return obj.agent.name if obj.agent_id else None
+
+    def get_agent_place(self, obj):
+        return obj.agent.place if obj.agent_id else None
 
     def get_total_payable(self, obj):
         """What the customer actually paid: taxable subtotal + tax - refunds.
@@ -72,6 +84,10 @@ class SaleSerializer(serializers.ModelSerializer):
             "staff",
             "staff_code",
             "staff_name",
+            "agent",
+            "agent_code",
+            "agent_name",
+            "agent_place",
             "status",
             "source",
             "gross_total",

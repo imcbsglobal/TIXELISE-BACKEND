@@ -15,6 +15,7 @@ from decimal import Decimal
 from django.db import IntegrityError, OperationalError, transaction
 from django.utils import timezone
 
+from apps.agents.models import Agent
 from apps.assignments.models import StaffEventAssignment
 from apps.audit.services import record_audit
 from apps.catalog.models import EventPrice, TicketCategory
@@ -326,6 +327,16 @@ def _load_manual_staff(tenant, staff_id) -> StaffProfile:
     return staff
 
 
+def _load_agent(tenant, agent_id) -> Agent:
+    try:
+        agent = Agent.objects.get(pk=agent_id, tenant_id=tenant.id)
+    except Agent.DoesNotExist:
+        raise NotFound("Agent not found.")
+    if agent.status != Agent.Status.ACTIVE:
+        raise BadRequest(detail="This agent is inactive.", code="AGENT_INACTIVE")
+    return agent
+
+
 def _unique_admin_staff_code(tenant) -> str:
     """A tenant-unique staff code for the admin holder, based on ``ADMIN``."""
     base = "ADMIN"
@@ -385,7 +396,7 @@ def _manual_assignment(tenant, staff, event):
 
 
 def issue_manual_tickets(
-    *, tenant, user, staff_id=None, event_id, items_data, idempotency_key
+    *, tenant, user, staff_id=None, agent_id=None, event_id, items_data, idempotency_key
 ):
     """
     Manual tickets issued by an admin, charged exactly like a POS sale.
@@ -414,6 +425,7 @@ def issue_manual_tickets(
     if items_data is None or len(items_data) == 0:
         raise BadRequest(detail="At least one item is required.", code="EMPTY_SALE")
 
+    agent = _load_agent(tenant, agent_id) if agent_id is not None else None
     categories = _load_categories(tenant, items_data)
 
     if staff_id is None:
@@ -440,6 +452,7 @@ def issue_manual_tickets(
         {
             "event": event.id,
             "staff": staff.id,
+            "agent": agent.id if agent else None,
             "items": items_data,
             "source": Sale.Source.MANUAL,
         }
@@ -480,6 +493,7 @@ def issue_manual_tickets(
                     tenant=tenant,
                     event=event,
                     staff=staff,
+                    agent=agent,
                     sale_reference=f"{tenant.code}-M-{secrets.token_hex(4).upper()}",
                     gross_total=gross_total,
                     tax_total=tax_total,

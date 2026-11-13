@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/v1/admin/", include("apps.events.urls")),
     path("api/v1/admin/", include("apps.catalog.urls")),
     path("api/v1/admin/", include("apps.staff.urls")),
+    path("api/v1/admin/", include("apps.agents.urls")),
     path("api/v1/admin/", include("apps.assignments.urls")),
     path("api/v1/admin/", include("apps.ticketing.urls")),
     path("api/v1/admin/", include("apps.sales.admin_urls")),

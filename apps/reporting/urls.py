@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .agent_summary import AgentSalesSummaryView
 from .staff_sales import StaffSalesDetailView
 from .staff_summary import StaffSalesSummaryView
 from .views import DailyReportView, DashboardView, StaffReportView
@@ -8,6 +9,11 @@ urlpatterns = [
     path("dashboard/", DashboardView.as_view(), name="admin-dashboard"),
     path("reports/daily/", DailyReportView.as_view(), name="admin-report-daily"),
     path("reports/staff/", StaffReportView.as_view(), name="admin-report-staff"),
+    path(
+        "reports/agents/",
+        AgentSalesSummaryView.as_view(),
+        name="admin-report-agents",
+    ),
     path(
         "reports/staff-summary/",
         StaffSalesSummaryView.as_view(),

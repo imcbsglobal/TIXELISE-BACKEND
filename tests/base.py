@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
+from apps.agents.models import Agent
 from apps.assignments.models import StaffEventAssignment
 from apps.catalog.models import EventPrice, TicketCategory
 from apps.events.models import Event
@@ -89,6 +90,13 @@ class APITestBase(APITestCase):
             end_at=now + timedelta(days=1),
             status=Event.Status.ACTIVE,
             created_by=self.admin_b_user,
+        )
+
+        self.agent_a = Agent.objects.create(
+            tenant=self.tenant_a, code="AG001", name="Agent A", place="Town A"
+        )
+        self.agent_b = Agent.objects.create(
+            tenant=self.tenant_b, code="AG001", name="Agent B", place="Town B"
         )
 
         self.cat_a_adult = TicketCategory.objects.create(

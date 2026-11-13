@@ -1044,6 +1044,48 @@ POST /api/v1/admin/staff/1/reset-password/
 
 **Errors:** `400 VALIDATION_ERROR` when password missing or fails validators. Password values are never echoed or logged.
 
+### 5.6a Agent master
+
+```
+GET  /api/v1/admin/agents/?status=active&search=ag
+POST /api/v1/admin/agents/
+GET  /api/v1/admin/agents/1/
+PATCH /api/v1/admin/agents/1/
+POST /api/v1/admin/agents/1/status/
+DELETE /api/v1/admin/agents/1/
+```
+
+Tenant admins can create lightweight sales agents. Agents are data records only
+and have no login, password, or POS membership. `code` is uppercase, unique per
+tenant, and `name` / `place` are required.
+
+**Create request:**
+```json
+{ "code": "AG001", "name": "Field Agent", "place": "North Town" }
+```
+
+**Response `201 Created`:**
+```json
+{
+  "id": 1,
+  "code": "AG001",
+  "name": "Field Agent",
+  "place": "North Town",
+  "status": "active",
+  "created_by": 2,
+  "created_at": "2026-11-13T08:10:00Z",
+  "updated_at": "2026-11-13T08:10:00Z"
+}
+```
+
+`POST /agents/1/status/` accepts `{ "status": "active" }` or
+`{ "status": "inactive" }`. Inactive agents are hidden from the manual ticket
+selector but stay in historical agent reports. `DELETE` is allowed only when the
+agent has no sales; otherwise it returns `409` and the agent must be deactivated.
+
+**Errors:** `400 VALIDATION_ERROR` for a duplicate code in the tenant; `404 NOT_FOUND`
+for an agent outside the tenant; `409 CONFLICT` when deleting an agent with sales.
+
 ---
 
 ### 5.7 Staff → Event assignments
@@ -1121,7 +1163,7 @@ POST /api/v1/admin/assignments/1/revoke/
 #### List sales
 
 ```
-GET /api/v1/admin/sales/?event=1&staff=1&status=completed&sale_reference=DREAMS001-S-6800898B&date_from=2026-10-01&date_to=2026-10-31
+GET /api/v1/admin/sales/?event=1&staff=1&agent=1&status=completed&sale_reference=DREAMS001-S-6800898B&date_from=2026-10-01&date_to=2026-10-31
 ```
 
 (`date_from` / `date_to` optional, `YYYY-MM-DD`, inclusive, resolved in the tenant's timezone.)
@@ -1145,6 +1187,10 @@ GET /api/v1/admin/sales/?event=1&staff=1&status=completed&sale_reference=DREAMS0
       "staff": 1,
       "staff_code": "ST012",
       "staff_name": "Ravi Kumar",
+      "agent": null,
+      "agent_code": null,
+      "agent_name": null,
+      "agent_place": null,
       "status": "completed",
       "source": "pos",
       "gross_total": "998.00",
@@ -1289,10 +1335,15 @@ separately. The tickets print, reprint and count exactly like POS tickets.
 no event assignment is required. Send a staff id to issue on that staff member's
 behalf, which still requires an active assignment.
 
+`agent` is also optional. Omit it (or send `null`) for an unattributed sale.
+Send an active agent id to record that agent on the sale for the agent report.
+The agent must belong to the current tenant.
+
 ```json
 {
   "event": 1,
   "staff": 3,
+  "agent": 2,
   "items": [{ "category": 2, "quantity": 2 }]
 }
 ```
@@ -1303,8 +1354,10 @@ the issued tickets nested under `"tickets"`. Replaying the same idempotency key
 returns the original sale with `"replayed": true` and creates no extra tickets.
 
 Errors: `EVENT_NOT_SELLABLE` (event not active), `STAFF_NOT_ASSIGNED`,
-`STAFF_INACTIVE`, `PRICE_UNAVAILABLE` (category has no active/effective price),
-`CATEGORY_NOT_ALLOWED` (assignment restricts categories), `IDEMPOTENCY_CONFLICT`.
+`STAFF_INACTIVE`, `AGENT_INACTIVE`, `PRICE_UNAVAILABLE` (category has no
+active/effective price), `CATEGORY_NOT_ALLOWED` (assignment restricts
+categories), `IDEMPOTENCY_CONFLICT`. An unknown or other-tenant agent returns
+`404 NOT_FOUND`.
 
 #### Ticket print payload
 
@@ -1534,6 +1587,61 @@ A lightweight, standalone counterpart to the staff report: three numbers per sta
 **Errors `403`:** `permission_denied` for any role other than `tenant_admin` / `pos_staff`, or `No active staff profile.` when a `pos_staff` caller has no active staff record.
 
 > `amount` is the sum of `gross_total`, matching the daily report. Every staff member is listed (zeros included) and rows are amount-descending, then staff code.
+
+#### Agent sales report
+
+```
+GET /api/v1/admin/reports/agents/?date_from=2026-10-01&date_to=2026-10-31
+```
+
+Tenant admin only. Ticket count, transaction count, gross, tax, refunds and total
+per agent for the selected range. Only sales with an `agent` are counted; sales
+without an agent stay in the existing reports. Inactive agents are included so
+their history remains visible, and agents with no sales in the range appear with
+zeroes.
+
+(`date_from` / `date_to` optional, `YYYY-MM-DD`, inclusive, resolved in the tenant
+timezone. No params = today; `date_from` alone spans it to today; `date_to` alone
+covers that single day.)
+
+**Response `200 OK`:**
+```json
+{
+  "date_from": "2026-10-01",
+  "date_to": "2026-10-31",
+  "timezone": "Asia/Kolkata",
+  "currency": "INR",
+  "totals": {
+    "agents_with_sales": 1,
+    "transactions": 4,
+    "tickets": 9,
+    "gross": "4491.00",
+    "tax": "0.00",
+    "refunds": "0.00",
+    "total": "4491.00"
+  },
+  "agents": [
+    {
+      "agent_id": 1,
+      "agent_code": "AG001",
+      "agent_name": "Field Agent",
+      "place": "North Town",
+      "status": "active",
+      "tickets": 9,
+      "transactions": 4,
+      "gross": "4491.00",
+      "tax": "0.00",
+      "refunds": "0.00",
+      "total": "4491.00",
+      "last_sale_at": "2026-10-20T08:01:28Z"
+    }
+  ]
+}
+```
+
+**Errors `400`:** `date_from and date_to must be YYYY-MM-DD.` · `date_from must be on or before date_to.`
+
+> Rows are total-descending, then agent code.
 
 #### Staff sales detail
 
