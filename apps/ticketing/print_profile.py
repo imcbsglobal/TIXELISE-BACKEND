@@ -185,6 +185,11 @@ class TicketPrintView(APIView):
                         "name": ticket.event.name,
                         "venue": ticket.event.venue,
                         "start_at": ticket.event.start_at.isoformat(),
+                        "end_at": (
+                            ticket.event.end_at.isoformat()
+                            if ticket.event.end_at
+                            else None
+                        ),
                     },
                     "category": ticket.category.name,
                     "staff_code": ticket.staff.staff_code,
