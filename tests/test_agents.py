@@ -15,22 +15,59 @@ class AgentMasterTests(APITestBase):
         self.login_admin_a()
         response = self.client.post(
             AGENTS_URL,
-            {"code": "ag002", "name": "Field Agent", "place": "North Town"},
+            {
+                "code": "ag002",
+                "name": "Field Agent",
+                "place": "North Town",
+                "phone": "+919876543299",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.data["code"], "AG002")
+        self.assertEqual(response.data["phone"], "+919876543299")
         self.assertEqual(response.data["status"], "active")
         self.assertEqual(response.data["created_by"], self.admin_a_user.id)
 
         agent = Agent.objects.get(pk=response.data["id"])
         self.assertEqual(agent.tenant, self.tenant_a)
+        self.assertEqual(agent.phone, "+919876543299")
+
+    def test_phone_is_required(self):
+        self.login_admin_a()
+        response = self.client.post(
+            AGENTS_URL,
+            {"code": "AG003", "name": "No Phone", "place": "North Town"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "VALIDATION_ERROR")
+        self.assertIn("phone", response.data["error"]["message"])
+
+    def test_phone_update_and_search(self):
+        self.login_admin_a()
+        response = self.client.patch(
+            f"{AGENTS_URL}{self.agent_a.id}/",
+            {"phone": "+919800000000"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["phone"], "+919800000000")
+
+        listing = self.client.get(f"{AGENTS_URL}?search=9800000000")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual([row["id"] for row in listing.data["results"]], [self.agent_a.id])
 
     def test_duplicate_code_rejected_per_tenant(self):
         self.login_admin_a()
         response = self.client.post(
             AGENTS_URL,
-            {"code": "AG001", "name": "Duplicate", "place": "North Town"},
+            {
+                "code": "AG001",
+                "name": "Duplicate",
+                "place": "North Town",
+                "phone": "+919876543212",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 400)

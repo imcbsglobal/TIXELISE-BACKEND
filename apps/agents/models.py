@@ -11,6 +11,7 @@ class Agent(TenantOwnedModel):
     code = models.CharField(max_length=32)
     name = models.CharField(max_length=255)
     place = models.CharField(max_length=255)
+    phone = models.CharField(max_length=32, blank=False, default="")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     created_by = models.ForeignKey(
         "accounts.User",

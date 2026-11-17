@@ -1057,11 +1057,17 @@ DELETE /api/v1/admin/agents/1/
 
 Tenant admins can create lightweight sales agents. Agents are data records only
 and have no login, password, or POS membership. `code` is uppercase, unique per
-tenant, and `name` / `place` are required.
+tenant, and `name` / `place` / `phone` are required. `phone` is a free-form
+contact number up to 32 characters.
 
 **Create request:**
 ```json
-{ "code": "AG001", "name": "Field Agent", "place": "North Town" }
+{
+  "code": "AG001",
+  "name": "Field Agent",
+  "place": "North Town",
+  "phone": "+91 98765 43210"
+}
 ```
 
 **Response `201 Created`:**
@@ -1071,6 +1077,7 @@ tenant, and `name` / `place` are required.
   "code": "AG001",
   "name": "Field Agent",
   "place": "North Town",
+  "phone": "+91 98765 43210",
   "status": "active",
   "created_by": 2,
   "created_at": "2026-11-13T08:10:00Z",
@@ -1083,7 +1090,8 @@ tenant, and `name` / `place` are required.
 selector but stay in historical agent reports. `DELETE` is allowed only when the
 agent has no sales; otherwise it returns `409` and the agent must be deactivated.
 
-**Errors:** `400 VALIDATION_ERROR` for a duplicate code in the tenant; `404 NOT_FOUND`
+**Errors:** `400 VALIDATION_ERROR` for a duplicate code in the tenant or a missing
+`phone`; `404 NOT_FOUND`
 for an agent outside the tenant; `409 CONFLICT` when deleting an agent with sales.
 
 ---

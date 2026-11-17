@@ -56,25 +56,13 @@ MAX_LENGTHS = {
     "district": 100,
     "state": 100,
     "country": 100,
+    "referral_code": 100,
 }
 # The master takes the logo as base64 and caps the decoded image at 2 MB.
 # base64 inflates by roughly 4/3, so this guards the encoded form on the way out.
 MAX_LOGO_CHARS = 2_800_000
-REQUIRED_FIELDS = tuple(key for key in MAX_LENGTHS if key != "address_line_2")
-PRODUCT_FLAGS = (
-    "trellisco",
-    "claudius",
-    "melone",
-    "tixelise",
-    "trellisco_crm",
-    "melone_stay",
-    "trellisco_books",
-)
+REQUIRED_FIELDS = tuple(key for key in MAX_LENGTHS if key not in {"address_line_2", "referral_code"})
 STATUSES = ("ACTIVE", "INACTIVE")
-# A company registered through Tixelise is a Tixelise company: when a caller
-# expresses no product access at all, only Tixelise is enabled. Same convention
-# as the central user master registration in .views.
-_DEFAULT_PRODUCT_FLAGS = {field: field == "tixelise" for field in PRODUCT_FLAGS}
 SEARCH_FIELDS = (
     "company_name",
     "city",
@@ -85,6 +73,7 @@ SEARCH_FIELDS = (
     "gst_number",
     "pan_number",
     "license_key",
+    "referral_code",
 )
 
 
@@ -126,9 +115,18 @@ def _validate(payload, *, partial):
     if not isinstance(payload, dict):
         raise ValidationError("Expected a JSON object.")
 
-    allowed = set(MAX_LENGTHS) | set(PRODUCT_FLAGS) | {"status", "logo"}
+    normalized = dict(payload)
+    if "referal_code" in normalized:
+        if "referral_code" not in normalized:
+            normalized["referral_code"] = normalized.pop("referal_code")
+        else:
+            normalized.pop("referal_code")
+
+    allowed = set(MAX_LENGTHS) | {"status", "logo"}
     unknown = sorted(
-        str(key) for key in payload if key not in allowed and key not in ("id", "client_id")
+        str(key)
+        for key in normalized
+        if key not in allowed and key not in ("id", "client_id", "referal_code")
     )
     errors = {}
     if unknown:
@@ -136,23 +134,10 @@ def _validate(payload, *, partial):
 
     cleaned = {}
     for field in MAX_LENGTHS:
-        if field in payload or not partial:
-            cleaned[field] = _clean_text(field, payload.get(field), errors)
+        if field in normalized or not partial:
+            cleaned[field] = _clean_text(field, normalized.get(field), errors)
 
-    for field in PRODUCT_FLAGS:
-        if field in payload or not partial:
-            value = payload.get(field, False)
-            if not isinstance(value, bool):
-                errors[field] = "Must be true or false."
-            else:
-                cleaned[field] = value
-
-    # Only when no flag was mentioned: an explicit set of all-false values is
-    # still rejected below by _require_any_product.
-    if not partial and not any(field in payload for field in PRODUCT_FLAGS):
-        cleaned.update(_DEFAULT_PRODUCT_FLAGS)
-
-    status_value = str(payload.get("status") or "").strip().upper()
+    status_value = str(normalized.get("status") or "").strip().upper()
     if status_value:
         if status_value not in STATUSES:
             errors["status"] = "Status must be ACTIVE or INACTIVE."
@@ -178,11 +163,6 @@ def _validate(payload, *, partial):
     if errors:
         raise ValidationError(errors)
     return cleaned
-
-
-def _require_any_product(record):
-    if not any(bool(record.get(field)) for field in PRODUCT_FLAGS):
-        raise ValidationError({"products": "At least one product must be enabled."})
 
 
 def _companies_for_client(client_id):
@@ -304,7 +284,6 @@ class CompanyMasterView(APIView):
             )
 
         record = _validate(request.data, partial=False)
-        _require_any_product(record)
 
         ok, code, data, error = _central_request(
             "POST", COMPANY_MASTER_URL, {"client_id": client_id, **record}
@@ -338,7 +317,6 @@ class CompanyMasterItemView(APIView):
         record = _validate(request.data, partial=True)
 
         merged = {**existing, **record}
-        _require_any_product(merged)
 
         ok, code, data, error = _central_request(
             "PATCH", f"{COMPANY_MASTER_URL}{company_id}/", record
@@ -360,7 +338,6 @@ class CompanyMasterItemView(APIView):
         client_id = _client_id(request)
         _fetch_company(company_id, client_id)
         record = _validate(request.data, partial=False)
-        _require_any_product(record)
 
         ok, code, data, error = _central_request(
             "PUT", f"{COMPANY_MASTER_URL}{company_id}/", {"client_id": client_id, **record}

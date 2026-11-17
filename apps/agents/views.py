@@ -28,6 +28,7 @@ class AgentListCreateView(generics.ListCreateAPIView):
                 Q(code__icontains=search)
                 | Q(name__icontains=search)
                 | Q(place__icontains=search)
+                | Q(phone__icontains=search)
             )
         return qs
 
@@ -41,7 +42,7 @@ class AgentListCreateView(generics.ListCreateAPIView):
             action="agent.created",
             target_type="agent",
             target_id=agent.id,
-            metadata={"code": agent.code, "place": agent.place},
+            metadata={"code": agent.code, "place": agent.place, "phone": agent.phone},
         )
         return agent
 
@@ -61,7 +62,7 @@ class AgentDetailView(generics.RetrieveUpdateAPIView):
             action="agent.updated",
             target_type="agent",
             target_id=agent.id,
-            metadata={"code": agent.code, "place": agent.place},
+            metadata={"code": agent.code, "place": agent.place, "phone": agent.phone},
         )
 
     def delete(self, request, pk):

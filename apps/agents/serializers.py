@@ -11,6 +11,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "code",
             "name",
             "place",
+            "phone",
             "status",
             "created_by",
             "created_at",

@@ -93,10 +93,18 @@ class APITestBase(APITestCase):
         )
 
         self.agent_a = Agent.objects.create(
-            tenant=self.tenant_a, code="AG001", name="Agent A", place="Town A"
+            tenant=self.tenant_a,
+            code="AG001",
+            name="Agent A",
+            place="Town A",
+            phone="+919876543210",
         )
         self.agent_b = Agent.objects.create(
-            tenant=self.tenant_b, code="AG001", name="Agent B", place="Town B"
+            tenant=self.tenant_b,
+            code="AG001",
+            name="Agent B",
+            place="Town B",
+            phone="+919876543211",
         )
 
         self.cat_a_adult = TicketCategory.objects.create(
