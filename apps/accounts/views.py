@@ -32,7 +32,12 @@ class LoginView(APIView):
             action="auth.login",
             target_type="user",
             target_id=user.id,
-            metadata={"role": role},
+            metadata={
+                "role": role,
+                "central_user_provisioned": serializer.validated_data.get(
+                    "central_user_provisioned", False
+                ),
+            },
         )
 
         return Response(

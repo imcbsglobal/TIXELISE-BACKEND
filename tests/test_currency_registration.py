@@ -49,7 +49,7 @@ class CurrencyRegistrationTests(SimpleTestCase):
         self.assertEqual(
             json.loads(posts[0].data),
             {
-                "client_id": "GW9Q6NQQ5ONRU",
+                "client_id": "gW9q6nqq5onru",
                 "code": "INR",
                 "name": "Indian Rupee",
                 "status": "ACTIVE",

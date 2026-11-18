@@ -178,6 +178,32 @@ POST /api/v1/auth/login/
 
 > Platform login returns the same shape with `"role": "platform_admin"` and `"tenant": null`.
 
+**Tenant login is centrally verified on every attempt.** Before issuing a token,
+Tixelise POSTs `client_id`, `username`, `password`, and the exact project name
+`"tixelise"` to `https://centralmastermanagement.imcbs.com/api/user-login/`.
+The central service must return `success: true` and `project_enabled: true`;
+invalid credentials, an inactive account, or disabled Tixelise access prevent
+login. A central-service outage also prevents tenant login (`503
+CENTRAL_MASTER_UNAVAILABLE`). Platform-admin login without `tenant_code` keeps
+its existing flow.
+
+The login endpoint returns only an authentication result, not a user record. If
+central verification succeeds but the tenant is missing locally, Tixelise
+confirms the client against the active license lookup, uses the returned
+organization name, and creates the tenant with the model defaults (`INR`,
+`UTC`). It registers that default currency with the central currency master
+before saving local records. Tixelise then reads the matching
+`client_id` + `username` from the central user master and creates/links the
+local user and membership atomically. If only the user or membership is
+missing, it provisions those records under the existing tenant.
+
+Central `user_role` values map as `ADMIN` → `tenant_admin` and `USER` →
+`pos_staff`; POS staff also receive a local staff profile. The user details
+lookup is only needed for local provisioning, not ordinary logins. The
+submitted password is hashed locally for a newly created user and is never
+stored in plaintext. If central authentication, license lookup, or required
+central registration fails, login does not issue a token.
+
 **Errors:**
 
 | Status | Code | Cause |
@@ -188,6 +214,9 @@ POST /api/v1/auth/login/
 | 403 | `TENANT_SUSPENDED` | Tenant suspended |
 | 403 | `TENANT_INACTIVE` | Tenant deactivated |
 | 403 | `MEMBERSHIP_INACTIVE` | Membership deactivated |
+| 403 | `CENTRAL_ACCESS_DENIED` | Central account is inactive or Tixelise access is disabled |
+| 503 | `CENTRAL_MASTER_UNAVAILABLE` | Central login service is unavailable, or central user details cannot be read for provisioning |
+| 409 | `CENTRAL_USER_CONFLICT` | Username matches multiple local accounts |
 | 400 | `VALIDATION_ERROR` (message: `user_inactive`) | User account disabled |
 
 ### 3.2 Refresh token
@@ -350,7 +379,8 @@ POSTs the tenant's currency to the central currency master
 | `skipped` | Tenant code + currency pair already present (checked with a read first), or `CENTRAL_CURRENCY_SYNC_ENABLED=false` |
 | `failed` | Master unreachable or returned an error — the request fails and nothing is created |
 
-> `client_id` is the tenant `code`. `name` comes from a built-in ISO map for the
+> `client_id` is the tenant `code`, preserving its entered letter case.
+> `name` comes from a built-in ISO map for the
 > seven currencies offered by the tenant form (`AED`, `BHD`, `INR`, `KWD`, `OMR`,
 > `QAR`, `SAR`); any other code is sent as its own name. Onboarding is
 > **fail-closed**: a `failed` status aborts the request with

@@ -149,7 +149,7 @@ def _currency_already_registered(client_id, currency_code):
     for row in rows:
         if not isinstance(row, dict):
             continue
-        same_client = (row.get("client_id") or "").strip().upper() == client_id
+        same_client = (row.get("client_id") or "").strip().casefold() == client_id.casefold()
         same_code = (row.get("code") or "").strip().upper() == currency_code
         if same_client and same_code:
             return True
@@ -162,7 +162,7 @@ def _register_tenant_currency(client_id, currency_code):
     master. Never raises — the outcome is returned so the caller can decide how
     to report it. A third-party outage must not block tenant onboarding.
     """
-    client_id = (client_id or "").strip().upper()
+    client_id = (client_id or "").strip()
     currency_code = (currency_code or "").strip().upper()
     if not client_id or not currency_code:
         return {"status": "skipped", "detail": "Tenant code or currency missing."}

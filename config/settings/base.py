@@ -216,6 +216,15 @@ AUDIT_LOG_RETENTION_DAYS = int(os.environ.get("AUDIT_LOG_RETENTION_DAYS", "21"))
 # ---------------------------------------------------------------------------
 # Central master integration
 # ---------------------------------------------------------------------------
+# Tenant login is checked against the central user master on every login.
+CENTRAL_USER_LOGIN_URL = os.environ.get(
+    "CENTRAL_USER_LOGIN_URL",
+    "https://centralmastermanagement.imcbs.com/api/user-login/",
+)
+CENTRAL_USER_LOGIN_TIMEOUT_SECONDS = int(
+    os.environ.get("CENTRAL_USER_LOGIN_TIMEOUT_SECONDS", "10")
+)
+
 # When a tenant is created, its currency is registered in the central currency
 # master. Disable with CENTRAL_CURRENCY_SYNC_ENABLED=false (tests turn this off
 # so they never write to the third-party service).

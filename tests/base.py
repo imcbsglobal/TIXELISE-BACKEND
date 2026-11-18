@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import override_settings
 from django.utils import timezone
@@ -145,6 +146,32 @@ class APITestBase(APITestCase):
             event=self.event_a,
             created_by=self.admin_a_user,
         )
+
+        self.central_login_patcher = patch(
+            "apps.accounts.serializers.authenticate_central_tenant_user",
+            side_effect=self._test_central_login,
+        )
+        self.central_login_patcher.start()
+        self.addCleanup(self.central_login_patcher.stop)
+        self.license_check_patcher = patch(
+            "apps.accounts.serializers._check_license_expired", return_value=False
+        )
+        self.license_check_patcher.start()
+        self.addCleanup(self.license_check_patcher.stop)
+        self.platform_sync_patcher = patch(
+            "apps.accounts.serializers.sync_platform_superuser_from_external_api",
+            return_value=False,
+        )
+        self.platform_sync_patcher.start()
+        self.addCleanup(self.platform_sync_patcher.stop)
+
+    def _test_central_login(self, client_id, username, password):
+        user = User.objects.filter(username__iexact=username).first()
+        if not user or not user.is_active or not user.check_password(password):
+            return False
+        return TenantMembership.objects.filter(
+            tenant__code__iexact=client_id, user=user
+        ).exists()
 
     def login(self, username, password, tenant_code=None):
         payload = {"username": username, "password": password}
